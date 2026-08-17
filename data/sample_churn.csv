@@ -1,0 +1,51 @@
+customer_id,age,tenure_months,monthly_charges,total_charges,contract_type,support_tickets,paperless_billing,payment_method,internet_service,favorite_color,churned
+1001,58,12,89.50,1074.00,month-to-month,5,Yes,Electronic Check,Fiber Optic,Blue,1
+1002,29,48,45.20,2169.60,two-year,1,No,Bank Transfer,DSL,Red,0
+1003,62,4,95.10,380.40,month-to-month,6,Yes,Electronic Check,Fiber Optic,Green,1
+1004,34,60,20.05,1203.00,two-year,0,No,Credit Card,None,Yellow,0
+1005,67,8,102.30,818.40,month-to-month,4,Yes,Electronic Check,Fiber Optic,Blue,1
+1006,22,18,55.40,997.20,one-year,1,Yes,Mailed Check,DSL,Red,0
+1007,59,2,88.90,177.80,month-to-month,5,Yes,Electronic Check,Fiber Optic,Green,1
+1008,45,36,70.15,2525.40,one-year,2,No,Credit Card,DSL,Blue,0
+1009,61,6,99.80,598.80,month-to-month,7,Yes,Electronic Check,Fiber Optic,Red,1
+1010,31,52,24.80,1289.60,two-year,0,No,Bank Transfer,None,Green,0
+1011,56,10,91.00,910.00,month-to-month,4,Yes,Electronic Check,Fiber Optic,Yellow,1
+1012,28,42,65.00,2730.00,one-year,1,No,Credit Card,DSL,Blue,0
+1013,64,3,105.50,316.50,month-to-month,5,Yes,Electronic Check,Fiber Optic,Red,1
+1014,38,24,50.30,1207.20,one-year,2,No,Bank Transfer,DSL,Green,0
+1015,60,5,93.40,467.00,month-to-month,6,Yes,Electronic Check,Fiber Optic,Blue,1
+1016,25,30,19.95,598.50,two-year,0,No,Mailed Check,None,Yellow,0
+1017,66,1,97.80,97.80,month-to-month,4,Yes,Electronic Check,Fiber Optic,Red,1
+1018,41,40,75.60,3024.00,one-year,1,Yes,Credit Card,Fiber Optic,Green,0
+1019,57,9,86.20,775.80,month-to-month,5,Yes,Electronic Check,Fiber Optic,Blue,1
+1020,33,55,25.10,1380.50,two-year,0,No,Bank Transfer,None,Red,0
+1021,63,7,101.90,713.30,month-to-month,6,Yes,Electronic Check,Fiber Optic,Green,1
+1022,30,36,40.50,1458.00,one-year,1,No,Mailed Check,DSL,Yellow,0
+1023,55,11,89.00,979.00,month-to-month,4,Yes,Electronic Check,Fiber Optic,Blue,1
+1024,42,48,68.90,3307.20,two-year,2,No,Credit Card,DSL,Red,0
+1025,65,4,94.60,378.40,month-to-month,5,Yes,Electronic Check,Fiber Optic,Green,1
+1026,27,20,52.80,1056.00,one-year,1,Yes,Mailed Check,DSL,Blue,0
+1027,58,6,98.20,589.20,month-to-month,6,Yes,Electronic Check,Fiber Optic,Red,1
+1028,36,50,22.40,1120.00,two-year,0,No,Bank Transfer,None,Yellow,0
+1029,60,8,90.40,723.20,month-to-month,4,Yes,Electronic Check,Fiber Optic,Green,1
+1030,24,15,61.20,918.00,one-year,2,No,Credit Card,DSL,Blue,0
+1031,69,2,106.10,212.20,month-to-month,7,Yes,Electronic Check,Fiber Optic,Red,1
+1032,44,62,79.80,4947.60,two-year,1,No,Bank Transfer,Fiber Optic,Green,0
+1033,56,5,92.50,462.50,month-to-month,5,Yes,Electronic Check,Fiber Optic,Yellow,1
+1034,26,45,19.50,877.50,two-year,0,No,Mailed Check,None,Blue,0
+1035,61,3,96.70,290.10,month-to-month,6,Yes,Electronic Check,Fiber Optic,Red,1
+1036,39,32,71.40,2284.80,one-year,2,Yes,Credit Card,Fiber Optic,Green,0
+1037,57,9,87.90,791.10,month-to-month,4,Yes,Electronic Check,Fiber Optic,Blue,1
+1038,32,58,25.60,1484.80,two-year,0,No,Bank Transfer,None,Red,0
+1039,64,7,103.40,723.80,month-to-month,5,Yes,Electronic Check,Fiber Optic,Green,1
+1040,23,22,48.90,1075.80,one-year,1,No,Mailed Check,DSL,Yellow,0
+1041,59,10,91.80,918.00,month-to-month,5,Yes,Electronic Check,Fiber Optic,Blue,1
+1042,43,44,67.20,2956.80,two-year,1,No,Credit Card,DSL,Red,0
+1043,62,4,95.80,383.20,month-to-month,6,Yes,Electronic Check,Fiber Optic,Green,1
+1044,28,14,54.10,757.40,month-to-month,3,Yes,Mailed Check,DSL,Blue,0
+1045,68,1,104.90,104.90,month-to-month,8,Yes,Electronic Check,Fiber Optic,Red,1
+1046,35,54,82.30,4444.20,two-year,1,No,Bank Transfer,Fiber Optic,Yellow,0
+1047,56,8,88.40,707.20,month-to-month,4,Yes,Electronic Check,Fiber Optic,Green,1
+1048,31,28,63.70,1783.60,one-year,2,No,Credit Card,DSL,Blue,0
+1049,63,6,99.10,594.60,month-to-month,5,Yes,Electronic Check,Fiber Optic,Red,1
+1050,22,38,20.40,775.20,two-year,0,No,Mailed Check,None,Green,0
