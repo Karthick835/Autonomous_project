@@ -12,3 +12,11 @@ sse-starlette>=1.6.0
 nbformat>=5.9.0
 httpx>=0.24.0
 python-multipart>=0.0.6
+matplotlib>=3.7.0
+seaborn>=0.12.0
+# Multi-LLM support
+google-genai>=1.0.0
+openai>=1.30.0
+anthropic>=0.28.0
+# ChromaDB persistent vector memory
+chromadb>=0.5.0

@@ -1,0 +1,29 @@
+version: "3.9"
+
+services:
+  # Backend — FastAPI + all agents
+  backend:
+    build: .
+    ports:
+      - "5050:5050"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - PORT=5050
+    volumes:
+      - ./uploads:/app/uploads          # User-uploaded CSVs persist
+      - ./chroma_db:/app/chroma_db      # ChromaDB memory persists
+      - ./backend/charts:/app/backend/charts  # Generated charts persist
+    restart: unless-stopped
+
+  # Frontend dev server (development only — not needed in production)
+  # In production, the React build is served by the backend FastAPI server.
+  # frontend:
+  #   image: node:20-slim
+  #   working_dir: /app
+  #   volumes:
+  #     - ./frontend:/app
+  #   ports:
+  #     - "3030:3030"
+  #   command: sh -c "npm install && npm run dev -- --host 0.0.0.0 --port 3030"
