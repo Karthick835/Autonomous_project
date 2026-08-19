@@ -110,6 +110,8 @@ class DataProfilerAgent:
                         if abs(val) >= 0.95 and c1 != active_target and c2 != active_target:
                             leakage_warnings.append(f"Near-perfect multicollinearity between '{c1}' and '{c2}' (r = {round(val, 3)}).")
 
+        preview_clean = df.head(10).replace({np.nan: None}).to_dict(orient="records")
+
         return {
             "num_rows": num_rows,
             "num_cols": num_cols,
@@ -122,6 +124,6 @@ class DataProfilerAgent:
             "column_profiles": column_profiles,
             "high_correlations": correlations,
             "leakage_warnings": leakage_warnings,
-            "preview_rows": df.head(10).to_dict(orient="records")
+            "preview_rows": preview_clean
         }
 

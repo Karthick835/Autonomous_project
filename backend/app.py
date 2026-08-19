@@ -28,6 +28,7 @@ from pydantic import BaseModel
 
 from engine.orchestrator import ResearchOrchestrator
 from agents.profiler import DataProfilerAgent
+from agents.validator import sanitize_val
 from agents.nl_interpreter import interpret_nl_query
 from llm.provider import LLMProvider, LLMConfigurationError
 
@@ -146,7 +147,7 @@ def list_sample_datasets():
 def get_dataset_preview(filename: str):
     csv_path = resolve_csv_path(filename)
     profiler = DataProfilerAgent()
-    profile = profiler.profile_csv(csv_path)
+    profile = sanitize_val(profiler.profile_csv(csv_path))
     return {"profile": profile}
 
 
@@ -163,7 +164,7 @@ async def upload_dataset(file: UploadFile = File(...)):
         shutil.copyfileobj(file.file, buffer)
 
     profiler = DataProfilerAgent()
-    profile = profiler.profile_csv(saved_path)
+    profile = sanitize_val(profiler.profile_csv(saved_path))
 
     return {
         "filename": saved_filename,
