@@ -9,23 +9,89 @@ const API = 'http://127.0.0.1:5050';
 
 export default function DatasetUpload({ onStartInvestigation }) {
   const [samples, setSamples] = useState([]);
-  const [selectedSample, setSelectedSample] = useState('');
-  const [uploadedFile, setUploadedFile] = useState(null);
-  const [uploadedOriginalName, setUploadedOriginalName] = useState('');
+  const [selectedSample, setSelectedSample] = useState(() => {
+    return localStorage.getItem('ai_selected_sample') || '';
+  });
+  const [uploadedFile, setUploadedFile] = useState(() => {
+    return localStorage.getItem('ai_uploaded_file') || null;
+  });
+  const [uploadedOriginalName, setUploadedOriginalName] = useState(() => {
+    return localStorage.getItem('ai_uploaded_orig_name') || '';
+  });
   const [profile, setProfile] = useState(null);
-  const [selectedTarget, setSelectedTarget] = useState('');
-  const [taskType, setTaskType] = useState('classification');
-  const [domainContext, setDomainContext] = useState('');
-  const [nlQuery, setNlQuery] = useState('');
+  const [selectedTarget, setSelectedTarget] = useState(() => {
+    return localStorage.getItem('ai_selected_target') || '';
+  });
+  const [taskType, setTaskType] = useState(() => {
+    return localStorage.getItem('ai_task_type') || 'classification';
+  });
+  const [domainContext, setDomainContext] = useState(() => {
+    return localStorage.getItem('ai_domain_context') || '';
+  });
+  const [nlQuery, setNlQuery] = useState(() => {
+    return localStorage.getItem('ai_nl_query') || '';
+  });
   const [nlMode, setNlMode] = useState(false);
   const [nlLoading, setNlLoading] = useState(false);
   const [nlResult, setNlResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
-  const [selectedLLM, setSelectedLLM] = useState('gemini');
+  const [selectedLLM, setSelectedLLM] = useState(() => {
+    return localStorage.getItem('ai_selected_llm') || 'gemini';
+  });
   const [uploadProgress, setUploadProgress] = useState(0);
   const [showAllColumns, setShowAllColumns] = useState(false);
+
+  // Sync to localStorage
+  useEffect(() => {
+    if (selectedSample) localStorage.setItem('ai_selected_sample', selectedSample);
+    else localStorage.removeItem('ai_selected_sample');
+  }, [selectedSample]);
+
+  useEffect(() => {
+    if (uploadedFile) {
+      localStorage.setItem('ai_uploaded_file', uploadedFile);
+      localStorage.setItem('ai_uploaded_orig_name', uploadedOriginalName);
+    } else {
+      localStorage.removeItem('ai_uploaded_file');
+      localStorage.removeItem('ai_uploaded_orig_name');
+    }
+  }, [uploadedFile, uploadedOriginalName]);
+
+  useEffect(() => {
+    if (selectedTarget) localStorage.setItem('ai_selected_target', selectedTarget);
+  }, [selectedTarget]);
+
+  useEffect(() => {
+    if (taskType) localStorage.setItem('ai_task_type', taskType);
+  }, [taskType]);
+
+  useEffect(() => {
+    localStorage.setItem('ai_domain_context', domainContext);
+  }, [domainContext]);
+
+  useEffect(() => {
+    localStorage.setItem('ai_selected_llm', selectedLLM);
+  }, [selectedLLM]);
+
+  const fetchPreview = useCallback((filename, keepTarget = false) => {
+    if (!filename) return;
+    setLoading(true);
+    fetch(`${API}/api/dataset-preview/${filename}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.profile) {
+          setProfile(d.profile);
+          if (!keepTarget || !selectedTarget) {
+            setSelectedTarget(d.profile.active_target || '');
+            setTaskType(d.profile.active_task || 'classification');
+          }
+        }
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, [selectedTarget]);
 
   useEffect(() => {
     fetch(`${API}/api/sample-datasets`)
@@ -33,25 +99,15 @@ export default function DatasetUpload({ onStartInvestigation }) {
       .then(d => {
         if (d.samples?.length) {
           setSamples(d.samples);
-          handleSelectSample(d.samples[0].name);
+          const savedActive = localStorage.getItem('ai_uploaded_file') || localStorage.getItem('ai_selected_sample');
+          if (savedActive) {
+            fetchPreview(savedActive, true);
+          } else {
+            handleSelectSample(d.samples[0].name);
+          }
         }
       })
       .catch(console.error);
-  }, []);
-
-  const fetchPreview = useCallback((filename) => {
-    setLoading(true);
-    fetch(`${API}/api/dataset-preview/${filename}`)
-      .then(r => r.json())
-      .then(d => {
-        if (d.profile) {
-          setProfile(d.profile);
-          setSelectedTarget(d.profile.active_target || '');
-          setTaskType(d.profile.active_task || 'classification');
-        }
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
   }, []);
 
   const handleSelectSample = (name) => {
@@ -60,7 +116,7 @@ export default function DatasetUpload({ onStartInvestigation }) {
     setUploadedOriginalName('');
     setProfile(null);
     setNlResult(null);
-    fetchPreview(name);
+    fetchPreview(name, false);
   };
 
   const processFile = async (file) => {

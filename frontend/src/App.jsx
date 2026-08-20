@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   FlaskConical, Database, Activity, FileText,
   ChevronRight, ChevronLeft, GitCompare, Brain,
-  MemoryStick, Settings, Circle
+  Circle, RotateCcw, PlusCircle
 } from 'lucide-react';
 import DatasetUpload from './components/DatasetUpload';
 import LiveLoopMonitor from './components/LiveLoopMonitor';
@@ -12,9 +12,9 @@ import CompareUpload from './components/CompareUpload';
 const API = 'http://127.0.0.1:5050';
 
 const NAV_ITEMS = [
-  { id: 'upload',   label: 'Dataset Setup',    icon: Database,    alwaysEnabled: true },
-  { id: 'monitor',  label: 'Live Loop Monitor', icon: Activity,    requiresSession: true },
-  { id: 'results',  label: 'Scientific Findings', icon: FileText,  requiresResults: true },
+  { id: 'upload',   label: 'Dataset Setup',       icon: Database,    alwaysEnabled: true },
+  { id: 'monitor',  label: 'Live Loop Monitor',    icon: Activity,    requiresSession: true },
+  { id: 'results',  label: 'Scientific Findings', icon: FileText,    requiresResults: true },
   { id: 'compare',  label: 'Multi-Dataset Compare', icon: GitCompare, alwaysEnabled: true },
 ];
 
@@ -30,19 +30,76 @@ function AuroraBackground({ active }) {
 }
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('upload');
-  const [sessionId, setSessionId] = useState(null);
-  const [results, setResults] = useState(null);
+  // Load state from localStorage on page refresh
+  const [activeTab, setActiveTab] = useState(() => {
+    return localStorage.getItem('ai_active_tab') || 'upload';
+  });
+  const [sessionId, setSessionId] = useState(() => {
+    return localStorage.getItem('ai_session_id') || null;
+  });
+  const [results, setResults] = useState(() => {
+    try {
+      const saved = localStorage.getItem('ai_results');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   const [sidebarExpanded, setSidebarExpanded] = useState(false);
   const [systemStatus, setSystemStatus] = useState(null);
-  const [currentLLM, setCurrentLLM] = useState('gemini');
+  const [currentLLM, setCurrentLLM] = useState(() => {
+    return localStorage.getItem('ai_current_llm') || 'gemini';
+  });
   const [isInvestigating, setIsInvestigating] = useState(false);
 
+  // Sync to localStorage
+  useEffect(() => {
+    localStorage.setItem('ai_active_tab', activeTab);
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (sessionId) {
+      localStorage.setItem('ai_session_id', sessionId);
+    } else {
+      localStorage.removeItem('ai_session_id');
+    }
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (results) {
+      try {
+        localStorage.setItem('ai_results', JSON.stringify(results));
+      } catch (e) {
+        console.warn('Could not cache results in localStorage:', e);
+      }
+    } else {
+      localStorage.removeItem('ai_results');
+    }
+  }, [results]);
+
+  useEffect(() => {
+    localStorage.setItem('ai_current_llm', currentLLM);
+  }, [currentLLM]);
+
+  // Initial load: Fetch system status and re-hydrate results if session exists but results missing
   useEffect(() => {
     fetch(`${API}/api/status`)
       .then(r => r.json())
       .then(setSystemStatus)
       .catch(() => {});
+
+    const storedSessionId = localStorage.getItem('ai_session_id');
+    if (storedSessionId && !results) {
+      fetch(`${API}/api/results/${storedSessionId}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.results) {
+            setResults(data.results);
+            if (activeTab === 'upload') setActiveTab('results');
+          }
+        })
+        .catch(() => {});
+    }
   }, []);
 
   const handleStartInvestigation = (csvFilename, domainContext, targetColumn, taskType, llmModel) => {
@@ -88,6 +145,15 @@ export default function App() {
         }
       })
       .catch(console.error);
+  };
+
+  const handleNewInvestigation = () => {
+    setSessionId(null);
+    setResults(null);
+    setIsInvestigating(false);
+    setActiveTab('upload');
+    localStorage.removeItem('ai_session_id');
+    localStorage.removeItem('ai_results');
   };
 
   const LLM_NAMES = { gemini: 'Gemini', gpt4o: 'GPT-4o', claude: 'Claude' };
@@ -142,7 +208,17 @@ export default function App() {
               );
             })}
 
-            <div className="sidebar-section-label" style={{ marginTop: 'var(--space-4)' }}>Tools</div>
+            <div className="sidebar-section-label" style={{ marginTop: 'var(--space-4)' }}>Actions</div>
+
+            <button
+              id="nav-new-investigation"
+              className="sidebar-nav-item"
+              onClick={handleNewInvestigation}
+              title="Start New Investigation"
+            >
+              <span className="sidebar-nav-icon"><PlusCircle size={18} color="var(--accent-cyan)" /></span>
+              <span className="sidebar-nav-label" style={{ color: 'var(--accent-cyan)' }}>New Investigation</span>
+            </button>
 
             <button
               id="nav-memory"
@@ -190,6 +266,19 @@ export default function App() {
             </div>
 
             <div className="header-pills">
+              {/* New Investigation Button in Header */}
+              {results && (
+                <button
+                  className="btn btn-secondary"
+                  style={{ height: 28, fontSize: 11, padding: '0 10px', gap: 4 }}
+                  onClick={handleNewInvestigation}
+                  title="Start fresh investigation"
+                >
+                  <RotateCcw size={12} />
+                  New Run
+                </button>
+              )}
+
               {/* Active LLM pill */}
               <span className="pill pill-violet" style={{ fontSize: 11 }}>
                 <span className="pill-dot" />
