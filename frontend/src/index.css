@@ -1661,3 +1661,316 @@ body {
   color: var(--text-primary);
   letter-spacing: -0.01em;
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   LEVEL 2: ADVERSARIAL VALIDATION SYSTEM STYLES
+═══════════════════════════════════════════════════════════════════ */
+
+/* ── Adversarial Live Panel ── */
+.adversarial-panel {
+  background: rgba(13, 17, 23, 0.95);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  margin-top: var(--space-4);
+  box-shadow: var(--card-shadow);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+}
+
+.adversarial-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--card-border);
+  margin-bottom: var(--space-5);
+}
+
+.adversarial-title {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* ── Slide-in Animations ── */
+@keyframes slide-in-left {
+  from {
+    opacity: 0;
+    transform: translateX(-40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(40px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slow-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+/* ── Falsification Challenge Card (Left) ── */
+.falsification-card {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  border-left: 4px solid var(--accent-rose);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  animation: slide-in-left 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  margin-bottom: var(--space-3);
+  position: relative;
+  overflow: hidden;
+}
+
+.falsification-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, var(--accent-rose), transparent);
+}
+
+/* ── Corroboration Response Card (Right) ── */
+.corroboration-card {
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-right: 4px solid var(--accent-green);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4);
+  animation: slide-in-right 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  margin-bottom: var(--space-3);
+  position: relative;
+  overflow: hidden;
+}
+
+.corroboration-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(270deg, var(--accent-green), transparent);
+}
+
+/* ── Paired Debate Layout ── */
+.debate-pair-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+@media (max-width: 800px) {
+  .debate-pair-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Data Reference Tag (Monospace) ── */
+.data-ref-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  background: var(--bg-surface);
+  color: var(--accent-cyan);
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(6, 182, 212, 0.2);
+  margin-top: var(--space-2);
+  word-break: break-all;
+}
+
+/* ── Arbitration Verdict Card ── */
+.arbitration-verdict-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius-xl);
+  padding: var(--space-6);
+  margin-top: var(--space-4);
+  text-align: center;
+  animation: slow-fade-in 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  position: relative;
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+}
+
+.arbitration-verdict-card.validated {
+  border-color: rgba(16, 185, 129, 0.4);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6), 0 0 24px rgba(16, 185, 129, 0.15);
+}
+
+.arbitration-verdict-card.conditional {
+  border-color: rgba(245, 158, 11, 0.4);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6), 0 0 24px rgba(245, 158, 11, 0.15);
+}
+
+.arbitration-verdict-card.invalidated {
+  border-color: rgba(239, 68, 68, 0.4);
+  box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6), 0 0 24px rgba(239, 68, 68, 0.15);
+}
+
+/* ── Solid Verdict Badges ── */
+.verdict-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 6px 16px;
+  border-radius: var(--radius-full);
+  margin-bottom: var(--space-3);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
+}
+
+.verdict-badge.validated {
+  background: var(--accent-green);
+  color: #080C14;
+}
+
+.verdict-badge.conditional {
+  background: var(--accent-amber);
+  color: #080C14;
+}
+
+.verdict-badge.invalidated {
+  background: var(--accent-rose);
+  color: #FFFFFF;
+}
+
+/* ── Circular Confidence Ring Gauge ── */
+.confidence-gauge-wrap {
+  position: relative;
+  width: 90px;
+  height: 90px;
+  margin: 0 auto var(--space-4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.confidence-gauge-svg {
+  transform: rotate(-90deg);
+  width: 100%;
+  height: 100%;
+}
+
+.confidence-gauge-bg {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.08);
+  stroke-width: 7;
+}
+
+.confidence-gauge-fill {
+  fill: none;
+  stroke-width: 7;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 1.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.confidence-gauge-text {
+  position: absolute;
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+/* ── Tier Badges & Headers (Report Viewer) ── */
+.tier-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 4px 10px;
+  border-radius: var(--radius-full);
+}
+
+.tier-badge-1 {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(6, 182, 212, 0.2));
+  color: var(--accent-green);
+  border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.tier-badge-2 {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.2), rgba(168, 85, 247, 0.2));
+  color: var(--accent-amber);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.tier-badge-3 {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.2), rgba(245, 158, 11, 0.2));
+  color: var(--accent-rose);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
+/* ── Conditions Drawer ── */
+.conditions-drawer {
+  margin-top: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: rgba(245, 158, 11, 0.06);
+  border: 1px dashed rgba(245, 158, 11, 0.35);
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.conditions-drawer-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 700;
+  color: var(--accent-amber);
+  margin-bottom: var(--space-2);
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+}
+
+/* ── Transparency Log (Tier 3) ── */
+.transparency-log-section {
+  margin-top: var(--space-6);
+  padding: var(--space-5);
+  background: rgba(8, 12, 20, 0.7);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: var(--radius-lg);
+}
+
+.transparency-item {
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.transparency-item:last-child {
+  border-bottom: none;
+}
+

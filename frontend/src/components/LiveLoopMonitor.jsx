@@ -1,5 +1,9 @@
-import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { Terminal, Cpu, CheckCircle, XCircle, AlertTriangle, Clock, Microscope, Lightbulb, Code2, ShieldCheck, FileBarChart, Database, BarChart3 } from 'lucide-react';
+import React, { useEffect, useState, useRef } from 'react';
+import {
+  Terminal, Cpu, CheckCircle, XCircle, AlertTriangle, Clock,
+  Microscope, Lightbulb, Code2, ShieldCheck, FileBarChart, Database,
+  BarChart3, Scale, ShieldAlert, Sparkles, Award
+} from 'lucide-react';
 
 const API = 'http://127.0.0.1:5050';
 
@@ -34,6 +38,24 @@ const AGENT_CONFIG = {
     className: 'agent-validator',
     logColor: 'var(--accent-green)',
   },
+  FalsificationAgent: {
+    label: 'Falsifier 🔴',
+    icon: <ShieldAlert size={14} />,
+    className: 'agent-chart',
+    logColor: 'var(--accent-rose)',
+  },
+  CorroborationAgent: {
+    label: 'Corroborator 🟢',
+    icon: <ShieldCheck size={14} />,
+    className: 'agent-validator',
+    logColor: 'var(--accent-green)',
+  },
+  ArbitrationAgent: {
+    label: 'Arbiter 🟡',
+    icon: <Scale size={14} />,
+    className: 'agent-engineer',
+    logColor: 'var(--accent-amber)',
+  },
   ScienceWriterAgent: {
     label: 'Reporter',
     icon: <FileBarChart size={14} />,
@@ -61,15 +83,15 @@ const AGENT_CONFIG = {
 };
 
 const STAGES = [
-  { id: 'PROFILING',       label: 'Data Profiling' },
-  { id: 'HYPOTHESIZING',   label: 'Hypothesizing' },
-  { id: 'EXPERIMENTATION', label: 'Experiments' },
-  { id: 'VALIDATION',      label: 'Validation' },
-  { id: 'REPORTING',       label: 'Reporting' },
+  { id: 'PROFILING',          label: 'Data Profiling' },
+  { id: 'HYPOTHESIZING',      label: 'Hypothesizing' },
+  { id: 'EXPERIMENTATION',    label: 'Experiments' },
+  { id: 'VALIDATION',         label: 'Validation' },
+  { id: 'ADVERSARIAL_REVIEW', label: 'Peer Review' },
+  { id: 'REPORTING',          label: 'Reporting' },
 ];
 
-// Typewriter hook
-function useTypewriter(text, speed = 18) {
+function useTypewriter(text, speed = 14) {
   const [displayed, setDisplayed] = useState('');
   useEffect(() => {
     setDisplayed('');
@@ -85,22 +107,61 @@ function useTypewriter(text, speed = 18) {
   return displayed;
 }
 
+// Circular Confidence Ring component
+function ConfidenceRing({ score, verdict }) {
+  const radius = 36;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (score / 100) * circumference;
+
+  const strokeColor =
+    verdict === 'VALIDATED'
+      ? 'var(--accent-green)'
+      : verdict === 'VALIDATED_WITH_CONDITIONS'
+      ? 'var(--accent-amber)'
+      : 'var(--accent-rose)';
+
+  return (
+    <div className="confidence-gauge-wrap">
+      <svg className="confidence-gauge-svg" viewBox="0 0 90 90">
+        <circle
+          className="confidence-gauge-bg"
+          cx="45"
+          cy="45"
+          r={radius}
+        />
+        <circle
+          className="confidence-gauge-fill"
+          cx="45"
+          cy="45"
+          r={radius}
+          stroke={strokeColor}
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+        />
+      </svg>
+      <div className="confidence-gauge-text">{score}%</div>
+    </div>
+  );
+}
+
 export default function LiveLoopMonitor({ sessionId, onComplete }) {
   const [logs, setLogs] = useState([]);
   const [stage, setStage] = useState('PROFILING');
   const [isFinished, setIsFinished] = useState(false);
   const [isError, setIsError] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
-  const [confirmedCount, setConfirmedCount] = useState(0);
+  const [tierCounts, setTierCounts] = useState({ tier1: 0, tier2: 0, tier3: 0 });
   const [testedCount, setTestedCount] = useState(0);
   const [lastThought, setLastThought] = useState('');
+  const [adversarialDebates, setAdversarialDebates] = useState({});
+  const [activeDebateId, setActiveDebateId] = useState(null);
+
   const logEndRef = useRef(null);
   const startTimeRef = useRef(Date.now());
   const timerRef = useRef(null);
 
-  const typedThought = useTypewriter(lastThought, 14);
+  const typedThought = useTypewriter(lastThought, 12);
 
-  // Elapsed timer
   useEffect(() => {
     if (isFinished) return;
     timerRef.current = setInterval(() => {
@@ -120,21 +181,67 @@ export default function LiveLoopMonitor({ sessionId, onComplete }) {
         const data = JSON.parse(e.data);
         if (data.stage === 'PING') return;
 
-        setLogs(prev => [...prev, data]);
-        if (data.stage) setStage(data.stage);
+        setLogs((prev) => [...prev, data]);
 
-        // Update thinking text
-        if (data.message) setLastThought(data.message);
-
-        // Track counts from validation messages
-        if (data.stage === 'VALIDATION' && data.payload?.validation) {
-          setConfirmedCount(data.payload.validation.confirmed_discoveries || 0);
-          setTestedCount(data.payload.validation.total_tested || 0);
+        // Map adversarial stages
+        if (data.stage?.startsWith('ADVERSARIAL_')) {
+          setStage('ADVERSARIAL_REVIEW');
+        } else if (data.stage) {
+          setStage(data.stage);
         }
 
-        // Track experiment completions
+        if (data.message) setLastThought(data.message);
+
+        // Handle Adversarial Falsify event
+        if (data.stage === 'ADVERSARIAL_FALSIFY' && data.payload?.hypothesis_id) {
+          const hid = data.payload.hypothesis_id;
+          setActiveDebateId(hid);
+          setAdversarialDebates((prev) => ({
+            ...prev,
+            [hid]: {
+              ...(prev[hid] || {}),
+              hypothesis_id: hid,
+              hypothesis_title: data.payload.hypothesis_title,
+              falsification: data.payload.falsification,
+            },
+          }));
+        }
+
+        // Handle Adversarial Corroborate event
+        if (data.stage === 'ADVERSARIAL_CORROBORATE' && data.payload?.hypothesis_id) {
+          const hid = data.payload.hypothesis_id;
+          setAdversarialDebates((prev) => ({
+            ...prev,
+            [hid]: {
+              ...(prev[hid] || {}),
+              corroboration: data.payload.corroboration,
+            },
+          }));
+        }
+
+        // Handle Adversarial Arbitrate event
+        if (data.stage === 'ADVERSARIAL_ARBITRATE' && data.payload?.hypothesis_id) {
+          const hid = data.payload.hypothesis_id;
+          const verd = data.payload.verdict;
+          setAdversarialDebates((prev) => ({
+            ...prev,
+            [hid]: {
+              ...(prev[hid] || {}),
+              arbitration: data.payload.arbitration,
+              verdict: verd,
+              confidence_score: data.payload.confidence_score,
+            },
+          }));
+
+          setTierCounts((prev) => ({
+            tier1: verd === 'VALIDATED' ? prev.tier1 + 1 : prev.tier1,
+            tier2: verd === 'VALIDATED_WITH_CONDITIONS' ? prev.tier2 + 1 : prev.tier2,
+            tier3: verd === 'INVALIDATED' ? prev.tier3 + 1 : prev.tier3,
+          }));
+        }
+
         if (data.stage === 'EXPERIMENTATION' && data.agent === 'PythonSandbox') {
-          setTestedCount(p => p + 1);
+          setTestedCount((p) => p + 1);
         }
 
         if (data.stage === 'COMPLETE') {
@@ -161,15 +268,18 @@ export default function LiveLoopMonitor({ sessionId, onComplete }) {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [logs]);
 
-  const activeIdx = STAGES.findIndex(s => s.id === stage);
+  const activeIdx = STAGES.findIndex((s) => s.id === stage);
   const elapsed = elapsedMs / 1000;
-  const elapsedStr = elapsed < 60
-    ? `${elapsed.toFixed(1)}s`
-    : `${Math.floor(elapsed / 60)}m ${(elapsed % 60).toFixed(0)}s`;
+  const elapsedStr =
+    elapsed < 60
+      ? `${elapsed.toFixed(1)}s`
+      : `${Math.floor(elapsed / 60)}m ${(elapsed % 60).toFixed(0)}s`;
+
+  const debateKeys = Object.keys(adversarialDebates);
+  const activeDebate = adversarialDebates[activeDebateId] || (debateKeys.length > 0 ? adversarialDebates[debateKeys[debateKeys.length - 1]] : null);
 
   return (
-    <div className="fade-in" style={{ maxWidth: 1080, margin: '0 auto' }}>
-
+    <div className="fade-in" style={{ maxWidth: 1120, margin: '0 auto' }}>
       {/* ── Header ── */}
       <div className="card" style={{ padding: 'var(--space-5)', marginBottom: 'var(--space-4)' }}>
         <div className="flex items-center justify-between" style={{ marginBottom: 'var(--space-4)' }}>
@@ -178,9 +288,9 @@ export default function LiveLoopMonitor({ sessionId, onComplete }) {
               <Cpu size={16} className={!isFinished ? 'spin' : ''} />
             </div>
             <div>
-              <div style={{ fontSize: 15, fontWeight: 700 }}>Autonomous AI Scientist Loop</div>
+              <div style={{ fontSize: 15, fontWeight: 800 }}>Level 2 Adversarial Validation Loop</div>
               <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
-                session: {sessionId}
+                session: {sessionId} · 8 active agents
               </div>
             </div>
           </div>
@@ -189,9 +299,9 @@ export default function LiveLoopMonitor({ sessionId, onComplete }) {
             {isError ? (
               <span className="pill pill-rose"><span className="pill-dot" />Pipeline Error</span>
             ) : isFinished ? (
-              <span className="pill pill-green"><span className="pill-dot" />Complete</span>
+              <span className="pill pill-green"><span className="pill-dot" />Peer Review Complete</span>
             ) : (
-              <span className="pill pill-violet"><span className="pill-dot-pulse" />Running</span>
+              <span className="pill pill-violet"><span className="pill-dot-pulse" />Adversarial Review Active</span>
             )}
           </div>
         </div>
@@ -226,8 +336,125 @@ export default function LiveLoopMonitor({ sessionId, onComplete }) {
         </div>
       </div>
 
-      <div className="grid-2" style={{ gap: 'var(--space-4)', marginBottom: 'var(--space-4)' }}>
-        {/* ── Agent Log Feed ── */}
+      {/* ── Live Adversarial Peer Review Panel ── */}
+      {activeDebate && (
+        <div className="adversarial-panel fade-in">
+          <div className="adversarial-header">
+            <div>
+              <div className="adversarial-title">
+                <Scale size={18} color="var(--accent-amber)" />
+                <span>Adversarial Peer Review Debate</span>
+                <span className="pill pill-cyan" style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+                  {activeDebate.hypothesis_id}
+                </span>
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 2 }}>
+                {activeDebate.hypothesis_title}
+              </div>
+            </div>
+
+            {/* Switch between contested hypotheses */}
+            {debateKeys.length > 1 && (
+              <div className="flex gap-1">
+                {debateKeys.map((hid) => (
+                  <button
+                    key={hid}
+                    onClick={() => setActiveDebateId(hid)}
+                    className={`pill ${activeDebate.hypothesis_id === hid ? 'pill-violet' : 'pill-neutral'}`}
+                    style={{ cursor: 'pointer', fontFamily: 'var(--font-mono)' }}
+                  >
+                    {hid}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Paired Challenges & Responses */}
+          {activeDebate.falsification?.challenges?.map((chal, idx) => {
+            const resp = activeDebate.corroboration?.responses?.find(
+              (r) => r.challenge_id === chal.id || activeDebate.corroboration?.responses?.[idx]
+            );
+
+            return (
+              <div key={chal.id || idx} className="debate-pair-grid">
+                {/* 🔴 Left: Falsification Challenge */}
+                <div className="falsification-card">
+                  <div className="flex items-center justify-between" style={{ marginBottom: 'var(--space-2)' }}>
+                    <span className="pill pill-rose" style={{ fontSize: 10 }}>
+                      🔴 Challenge {chal.id || `C${idx + 1}`} · {chal.category}
+                    </span>
+                  </div>
+                  <p style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.5 }}>
+                    {chal.challenge_text}
+                  </p>
+                  {chal.data_reference && (
+                    <div className="data-ref-tag">
+                      <span>Data cited:</span> {chal.data_reference}
+                    </div>
+                  )}
+                </div>
+
+                {/* 🟢 Right: Corroboration Response */}
+                {resp ? (
+                  <div className="corroboration-card">
+                    <div className="flex items-center justify-between" style={{ marginBottom: 'var(--space-2)' }}>
+                      <span className={`pill ${resp.stance === 'REBUTTED' ? 'pill-green' : resp.stance === 'PARTIALLY_CONCEDED' ? 'pill-amber' : 'pill-rose'}`} style={{ fontSize: 10 }}>
+                        🟢 Defense to {chal.id || `C${idx + 1}`} · {resp.stance}
+                      </span>
+                    </div>
+                    <p style={{ fontSize: 13, color: 'var(--text-primary)', lineHeight: 1.5 }}>
+                      {resp.rebuttal_text}
+                    </p>
+                    {resp.supporting_data && (
+                      <div className="data-ref-tag" style={{ borderColor: 'rgba(16, 185, 129, 0.3)', color: 'var(--accent-green)' }}>
+                        <span>Support:</span> {resp.supporting_data}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="skeleton" style={{ height: 110, borderRadius: 'var(--radius-lg)' }} />
+                )}
+              </div>
+            );
+          })}
+
+          {/* 🟡 Center: Arbitration Editor Verdict */}
+          {activeDebate.arbitration && (
+            <div className={`arbitration-verdict-card ${activeDebate.verdict === 'VALIDATED' ? 'validated' : activeDebate.verdict === 'VALIDATED_WITH_CONDITIONS' ? 'conditional' : 'invalidated'}`}>
+              <ConfidenceRing
+                score={activeDebate.confidence_score || 85}
+                verdict={activeDebate.verdict}
+              />
+
+              <div>
+                <span className={`verdict-badge ${activeDebate.verdict === 'VALIDATED' ? 'validated' : activeDebate.verdict === 'VALIDATED_WITH_CONDITIONS' ? 'conditional' : 'invalidated'}`}>
+                  {activeDebate.verdict === 'VALIDATED' ? '✅ Tier 1: VALIDATED' : activeDebate.verdict === 'VALIDATED_WITH_CONDITIONS' ? '⚠️ Tier 2: VALIDATED WITH CONDITIONS' : '❌ Tier 3: INVALIDATED'}
+                </span>
+              </div>
+
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)', maxWidth: 640, margin: 'var(--space-2) auto var(--space-3)', lineHeight: 1.6 }}>
+                "{activeDebate.arbitration.editorial_reasoning}"
+              </p>
+
+              {activeDebate.arbitration.conditions?.length > 0 && (
+                <div className="conditions-drawer" style={{ textAlign: 'left', maxWidth: 640, margin: '0 auto' }}>
+                  <div className="conditions-drawer-title">
+                    <AlertTriangle size={12} /> Stated Empirical Conditions & Limitations:
+                  </div>
+                  {activeDebate.arbitration.conditions.map((cond, ci) => (
+                    <div key={ci} style={{ marginBottom: 4 }}>• {cond}</div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Main Monitor Grid: Event Logs + Mini HUD ── */}
+      <div className="grid-2" style={{ gap: 'var(--space-4)', marginTop: 'var(--space-4)', marginBottom: 'var(--space-4)' }}>
+        {/* Agent Log Feed */}
         <div className="card" style={{ padding: 'var(--space-4)' }}>
           <div className="flex items-center gap-2" style={{ marginBottom: 'var(--space-3)', paddingBottom: 'var(--space-3)', borderBottom: '1px solid var(--card-border)' }}>
             <Terminal size={14} color="var(--text-secondary)" />
@@ -264,12 +491,11 @@ export default function LiveLoopMonitor({ sessionId, onComplete }) {
           </div>
         </div>
 
-        {/* ── Right panel: HUD + Thinking ── */}
+        {/* Right HUD & Thinking */}
         <div className="flex-col gap-4">
-          {/* Mini HUD */}
           <div className="card" style={{ padding: 'var(--space-4)' }}>
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--text-secondary)', marginBottom: 'var(--space-3)' }}>
-              Live Statistics
+              Peer Review Verdict Summary
             </div>
             <div className="flex-col gap-2" style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
               <div className="hud-row">
@@ -285,14 +511,16 @@ export default function LiveLoopMonitor({ sessionId, onComplete }) {
                 <span className="hud-value">{testedCount}</span>
               </div>
               <div className="hud-row">
-                <span className="hud-label">✅ Confirmed</span>
-                <span className="hud-value confirmed">{confirmedCount}</span>
+                <span className="hud-label">✅ Tier 1 (Validated)</span>
+                <span className="hud-value confirmed">{tierCounts.tier1}</span>
               </div>
               <div className="hud-row">
-                <span className="hud-label">Status</span>
-                <span className={`hud-value ${isFinished ? 'confirmed' : 'running'}`}>
-                  {isError ? 'ERROR' : isFinished ? 'DONE' : 'RUNNING'}
-                </span>
+                <span className="hud-label">⚠️ Tier 2 (Conditional)</span>
+                <span className="hud-value" style={{ color: 'var(--accent-amber)' }}>{tierCounts.tier2}</span>
+              </div>
+              <div className="hud-row">
+                <span className="hud-label">❌ Tier 3 (Invalidated)</span>
+                <span className="hud-value rejected">{tierCounts.tier3}</span>
               </div>
             </div>
           </div>
@@ -301,7 +529,7 @@ export default function LiveLoopMonitor({ sessionId, onComplete }) {
           {!isFinished && lastThought && (
             <div className="thinking-panel fade-in">
               <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--accent-violet)', textTransform: 'uppercase', marginBottom: 'var(--space-2)' }}>
-                🧠 Agent Reasoning
+                🧠 Agent Reasoning & Debate
               </div>
               <div className="thinking-text">
                 <span>{typedThought}</span>
@@ -310,7 +538,7 @@ export default function LiveLoopMonitor({ sessionId, onComplete }) {
             </div>
           )}
 
-          {/* Done state */}
+          {/* Finished State */}
           {isFinished && !isError && (
             <div className="fade-in" style={{
               padding: 'var(--space-5)',
@@ -319,26 +547,10 @@ export default function LiveLoopMonitor({ sessionId, onComplete }) {
               borderRadius: 'var(--radius-lg)',
               textAlign: 'center',
             }}>
-              <div style={{ fontSize: 32, marginBottom: 'var(--space-2)' }}>🎉</div>
-              <div style={{ fontWeight: 700, color: 'var(--accent-green)', marginBottom: 4 }}>Investigation Complete!</div>
+              <div style={{ fontSize: 32, marginBottom: 'var(--space-2)' }}>🔬</div>
+              <div style={{ fontWeight: 800, color: 'var(--accent-green)', marginBottom: 4 }}>Adversarial Peer Review Complete</div>
               <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                {confirmedCount} discovery(ies) confirmed in {elapsedStr}
-              </div>
-            </div>
-          )}
-
-          {isError && (
-            <div style={{
-              padding: 'var(--space-4)',
-              background: 'var(--accent-rose-dim)',
-              border: '1px solid var(--accent-rose-mid)',
-              borderRadius: 'var(--radius-lg)',
-            }}>
-              <div className="flex items-center gap-2" style={{ color: 'var(--accent-rose)', fontWeight: 600, marginBottom: 8 }}>
-                <AlertTriangle size={14} /> Pipeline Error
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                Check the log for details. Verify API keys in your .env file.
+                {tierCounts.tier1} Tier 1 validated, {tierCounts.tier2} Tier 2 conditional in {elapsedStr}
               </div>
             </div>
           )}
