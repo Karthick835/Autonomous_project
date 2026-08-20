@@ -4,6 +4,11 @@ Structured into 3 formal peer-reviewed tiers:
   Tier 1: Validated Findings (unconditional acceptance)
   Tier 2: Validated with Conditions (acceptance with stated empirical bounds)
   Tier 3: Invalidated Findings (Transparency Log)
+
+Level 3 additions:
+  - Enriched Dataset Badges (if supplemental data merged)
+  - Data Limitation Warnings (if critical/important gaps skipped)
+  - Future Data Enhancement Opportunities section
 """
 
 import json
@@ -15,7 +20,8 @@ from typing import Dict, Any, List, Optional
 class ScienceWriterAgent:
     """
     Generates executive Markdown reports and executable Jupyter Notebooks (.ipynb)
-    incorporating False Discovery Rate control and 3-Tier Adversarial Peer Review.
+    incorporating False Discovery Rate control, 3-Tier Adversarial Peer Review,
+    and Level 3 Active Data Acquisition provenance.
     """
 
     def generate_markdown_report(
@@ -24,6 +30,9 @@ class ScienceWriterAgent:
         validation: Dict[str, Any],
         adversarial_reviews: Optional[List[Dict[str, Any]]] = None,
         dataset_name: str = "Dataset",
+        enrichment_info: Optional[Dict[str, Any]] = None,
+        skipped_gaps: Optional[List[Dict[str, Any]]] = None,
+        optional_gaps: Optional[List[Dict[str, Any]]] = None,
     ) -> str:
         findings = validation.get("findings", [])
         reviews = adversarial_reviews or []
@@ -56,12 +65,28 @@ class ScienceWriterAgent:
         md.append(f"**Dataset**: `{dataset_name}`  |  **Target Column**: `{target_col}` (`{task_type}`)  |  **Observations (N)**: {num_rows}  |  **Features**: {num_cols}")
         md.append(f"**FDR Alpha**: {fdr_alpha}  |  **Tier 1 Validated**: {len(tier1)}  |  **Tier 2 Conditional**: {len(tier2)}  |  **Tier 3 Invalidated**: {len(tier3)}\n")
 
+        # Level 3: Dataset Provenance & Enrichment Banner
+        if enrichment_info and enrichment_info.get("success"):
+            md.append("### 🧬 Dataset Enrichment Provenance (Level 3 Active Acquisition)")
+            md.append(
+                f"- **Enrichment Strategy**: `{enrichment_info.get('strategy', 'Merge')}` on keys `{enrichment_info.get('merge_keys', [])}`\n"
+                f"- **Shape Shift**: Original ({enrichment_info.get('original_shape', (0,0))[0]}×{enrichment_info.get('original_shape', (0,0))[1]}) → "
+                f"Enriched ({enrichment_info.get('enriched_shape', (0,0))[0]}×{enrichment_info.get('enriched_shape', (0,0))[1]})\n"
+                f"- **New Variables Integrated**: `{enrichment_info.get('new_columns', [])}`\n"
+            )
+
+        if skipped_gaps:
+            md.append("### ⚠️ Active Data Sufficiency Limitations")
+            for gap in skipped_gaps:
+                md.append(f"- **Unresolved {gap.get('priority', 'GAP')}**: `{gap.get('title')}` — *{gap.get('why_it_matters')}*")
+            md.append("")
+
         # Executive Summary
         md.append("## Executive Summary")
         total = len(findings)
         md.append(
             f"The Autonomous AI Scientist evaluated **{total} hypotheses** on `{dataset_name}` targeting outcome `{target_col}`. "
-            f"Every candidate finding underwent two-stage verification: statistical False Discovery Rate (FDR) control and structured **Adversarial Peer Review** (Falsification $\\to$ Corroboration $\\to$ Arbitration)."
+            f"Every candidate finding underwent two-stage verification: statistical False Discovery Rate (FDR) control and structured **Adversarial Peer Review** (Falsification → Corroboration → Arbitration)."
         )
         md.append(
             f"\n- **Tier 1 (Fully Validated)**: {len(tier1)} discovery(ies) survived adversarial challenges without vulnerabilities."
@@ -72,22 +97,26 @@ class ScienceWriterAgent:
         # Tier 1
         md.append("\n## Tier 1 — Validated Findings (Highest Confidence)")
         if tier1:
-            md.append("| ID | Title | Test Type | Effect Size | P-Value | Confidence | Editorial Verdict |")
-            md.append("|---|---|---|---|---|---|---|")
+            md.append("| ID | Title | Test Type | Effect Size | P-Value | Confidence | Provenance | Editorial Verdict |")
+            md.append("|---|---|---|---|---|---|---|---|")
             for f, rev in tier1:
                 arb = rev.get("arbitration", {})
                 conf = arb.get("confidence_score", 90)
+                provenance_badge = "Enriched Data" if f.get("from_enriched_data") else "Original CSV"
                 md.append(
-                    f"| `{f['hypothesis_id']}` | **{f['title']}** | `{f['test_type']}` | {f['effect_size_metric']}={f['effect_size']:.3f} | `{f['p_value']:.4f}` | {conf}% | ✅ VALIDATED |"
+                    f"| `{f['hypothesis_id']}` | **{f['title']}** | `{f['test_type']}` | {f['effect_size_metric']}={f['effect_size']:.3f} | `{f['p_value']:.4f}` | {conf}% | {provenance_badge} | ✅ VALIDATED |"
                 )
             md.append("")
             for f, rev in tier1:
                 arb = rev.get("arbitration", {})
                 md.append(f"### `{f['hypothesis_id']}`: {f['title']}")
-                md.append(f"- **Statement**: {f['statement']}")
+                stmt = f.get('statement') or f.get('summary') or f.get('title', '')
+                md.append(f"- **Statement**: {stmt}")
                 md.append(f"- **Statistical Evidence**: {f['summary']}")
                 if arb.get("editorial_reasoning"):
                     md.append(f"- **Editorial Review**: *\"{arb['editorial_reasoning']}\"*")
+                if f.get("limitation_flags"):
+                    md.append(f"- **Data Caveats**: {'; '.join(f['limitation_flags'])}")
                 md.append("")
         else:
             md.append("*No hypotheses achieved unconditional Tier 1 validation.*")
@@ -108,38 +137,50 @@ class ScienceWriterAgent:
             for f, rev in tier2:
                 arb = rev.get("arbitration", {})
                 md.append(f"### `{f['hypothesis_id']}`: {f['title']} (⚠️ CONDITIONAL)")
-                md.append(f"- **Core Finding**: {f['summary']}")
-                if arb.get("conditions"):
-                    md.append("- **Required Conditions & Limitations**:")
-                    for c in arb["conditions"]:
-                        md.append(f"  - ⚠️ {c}")
+                stmt = f.get('statement') or f.get('summary') or f.get('title', '')
+                md.append(f"- **Statement**: {stmt}")
+                md.append(f"- **Statistical Evidence**: {f['summary']}")
                 if arb.get("editorial_reasoning"):
-                    md.append(f"- **Editor Assessment**: *\"{arb['editorial_reasoning']}\"*")
+                    md.append(f"- **Editorial Review**: *\"{arb['editorial_reasoning']}\"*")
+                if arb.get("conditions"):
+                    md.append("- **Peer Review Conditions & Stated Limitations**:")
+                    for c in arb["conditions"]:
+                        md.append(f"  - {c}")
+                if f.get("limitation_flags"):
+                    md.append(f"- **Data Sufficiency Flags**: {'; '.join(f['limitation_flags'])}")
                 md.append("")
         else:
-            md.append("*No hypotheses classified as Tier 2.*")
+            md.append("*No hypotheses classified into Tier 2.*")
 
         # Tier 3 (Transparency Log)
-        md.append("\n## Tier 3 — Invalidated Hypotheses (Transparency Log)")
-        md.append("> *In accordance with open science practices, negative results and invalidated hypotheses are fully documented.*")
+        md.append("\n## Tier 3 — Invalidated Findings (Transparency Log)")
+        md.append("> *Transparent science reports all tested hypotheses, including those invalidated during peer review or failing statistical FDR thresholds.*")
         if tier3:
+            md.append("| ID | Title | Reason for Rejection / Invalidation |")
+            md.append("|---|---|---|")
             for f, rev in tier3:
                 arb = rev.get("arbitration", {})
-                fals = rev.get("falsification", {})
-                reason = arb.get("editorial_reasoning") or fals.get("falsification_summary") or f.get("summary", "Failed significance threshold.")
-                md.append(f"- **`{f['hypothesis_id']}` — {f['title']}** (❌ INVALIDATED)")
-                md.append(f"  - *Reason*: {reason}")
-                md.append(f"  - *Stats*: Observed p={f['p_value']:.4f}, {f['effect_size_metric']}={f['effect_size']:.3f}")
+                reason = arb.get("editorial_reasoning") or f.get("rejection_reason") or "Failed statistical FDR significance or peer review challenge."
+                md.append(f"| `{f['hypothesis_id']}` | {f['title']} | {reason} |")
+            md.append("")
+            for f, rev in tier3:
+                arb = rev.get("arbitration", {})
+                md.append(f"### `{f['hypothesis_id']}`: {f['title']} (❌ INVALIDATED)")
+                stmt = f.get('statement') or f.get('summary') or f.get('title', '')
+                md.append(f"- **Statement**: {stmt}")
+                md.append(f"- **Rejection Details**: {arb.get('editorial_reasoning') or f.get('rejection_reason', 'Did not survive adversarial peer review.')}")
+                md.append("")
         else:
-            md.append("*All tested hypotheses satisfied minimum peer review criteria.*")
+            md.append("*All candidate hypotheses survived into Tier 1 or Tier 2.*")
 
-        # Methodological Framework
-        md.append("\n## Methodological Guardrails & Peer Review Framework")
-        md.append("1. **Automated EDA & Leakage Audit**: Screened primary key IDs and multicollinear covariates ($r \\ge 0.95$).")
-        md.append("2. **Benjamini-Hochberg FDR Control**: Corrected raw p-values across all simultaneous tests to eliminate p-hacking.")
-        md.append("3. **Karl Popper Falsification (Agent 6)**: Actively generated empirical counter-hypotheses and confounding challenges.")
-        md.append("4. **Corroborative Evidence Synthesis (Agent 7)**: Addressed reviewer critiques point-by-point with effect size bounds.")
-        md.append("5. **Deterministic Editorial Arbitration (Agent 8)**: Impartial scoring and tier classification with $\\tau=0.1$.")
+        # Level 3: Future Enhancement Opportunities Section
+        if optional_gaps:
+            md.append("\n## Data Enhancement Opportunities (Level 3 Active Intelligence)")
+            md.append("> *The following additional data sources would further strengthen or extend these findings if incorporated in future investigations:*")
+            for og in optional_gaps:
+                md.append(f"- **{og.get('title')}**: {og.get('what_is_missing')}")
+                md.append(f"  *Potential Impact*: {og.get('why_it_matters')}")
+            md.append("")
 
         return "\n".join(md)
 
@@ -150,19 +191,21 @@ class ScienceWriterAgent:
         validation: Dict[str, Any],
         output_ipynb_path: str,
         adversarial_reviews: Optional[List[Dict[str, Any]]] = None,
-    ):
+    ) -> None:
         nb = nbf.v4.new_notebook()
-        target_col = profile.get("active_target", "")
-        norm_csv = os.path.abspath(csv_path).replace("\\", "/")
+        dataset_name = os.path.basename(csv_path)
+        norm_csv = csv_path.replace("\\", "/")
 
-        # Cell 1: Title
+        # Cell 1: Metadata & Intro
         nb.cells.append(nbf.v4.new_markdown_cell(f"""# Autonomous AI Scientist — Reproducible Research Notebook
-**Dataset Path**: `{csv_path}`  
-**Active Target**: `{target_col}`  
-This notebook reproduces all data profiling, hypothesis testing, Benjamini-Hochberg FDR corrections, and adversarial peer review evaluations.
+**Dataset**: `{dataset_name}`
+**Target Column**: `{profile.get('active_target', 'N/A')}` ({profile.get('active_task', 'N/A')})
+**Total Validated Findings**: {validation.get('confirmed_discoveries', 0)} / {validation.get('total_hypotheses_tested', 0)}
+
+This notebook contains self-contained, reproducible Python code for all confirmed statistical discoveries and visualizations.
 """))
 
-        # Cell 2: Setup & Data Inspection
+        # Cell 2: Data Loading & Setup
         nb.cells.append(nbf.v4.new_code_cell(f"""import pandas as pd
 import numpy as np
 import scipy.stats as stats

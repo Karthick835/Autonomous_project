@@ -1,25 +1,28 @@
 """
-ResearchOrchestrator — Coordinates the full 8-agent Autonomous AI Scientist pipeline:
-1. DataProfilerAgent (EDA & Leakage audit)
-2. HypothesizerAgent (Hypothesis formulation + ChromaDB deduplication)
-3. CodeEngineerAgent + PythonSandbox (Deterministic AST-verified code execution)
-4. StatisticalValidatorAgent (Benjamini-Hochberg FDR correction & effect sizes)
-5. FalsificationAgent (Agent 6: Karl Popper empirical challenges with data citations)
-6. CorroborationAgent (Agent 7: Evidence synthesis & point-by-point rebuttal)
-7. ArbitrationAgent (Agent 8: Impartial editor verdict: VALIDATED / CONDITIONAL / INVALIDATED)
-8. ScienceWriterAgent (3-Tier executive report & reproducible Jupyter notebook)
+ResearchOrchestrator — Coordinates the full 9-agent Autonomous AI Scientist pipeline:
+1.  DataProfilerAgent        (EDA & Leakage audit)
+2.  DataGapAnalysisAgent     (Level 3: Active data acquisition — gap detection + pipeline pause)
+3.  HypothesizerAgent        (Hypothesis formulation + ChromaDB deduplication)
+4.  CodeEngineerAgent        + PythonSandbox (Deterministic AST-verified code execution)
+5.  StatisticalValidatorAgent (Benjamini-Hochberg FDR correction & effect sizes)
+6.  FalsificationAgent       (Agent 6: Karl Popper empirical challenges with data citations)
+7.  CorroborationAgent       (Agent 7: Evidence synthesis & point-by-point rebuttal)
+8.  ArbitrationAgent         (Agent 8: Impartial editor verdict: VALIDATED / CONDITIONAL / INVALIDATED)
+9.  ScienceWriterAgent       (3-Tier executive report & reproducible Jupyter notebook)
 
-Real-time SSE event streaming and disk persistence for adversarial review transcripts.
+Level 3: Pipeline pauses on CRITICAL data gaps. Resumes after user provides supplemental CSV.
+Real-time SSE streaming and disk persistence for adversarial review transcripts.
 """
 
 import os
 import json
 import time
-import math
+import threading
 import pandas as pd
 from typing import Dict, Any, List, Callable, Optional
 
 from agents.profiler import DataProfilerAgent
+from agents.data_gap_analysis_agent import DataGapAnalysisAgent
 from agents.hypothesizer import HypothesizerAgent
 from agents.code_engineer import CodeEngineerAgent
 from agents.validator import StatisticalValidatorAgent, sanitize_val
@@ -29,14 +32,20 @@ from agents.arbitration_agent import ArbitrationAgent
 from agents.reporter import ScienceWriterAgent
 from agents.chart_generator import ChartGeneratorAgent
 from engine.sandbox import PythonSandbox
+from engine.merger import DataMergeEngine
 from memory.chroma_store import get_memory
 from llm.provider import LLMProvider
 
 
+# Maximum time to wait for user to provide supplemental data (30 minutes)
+DATA_REQUEST_TIMEOUT_SECONDS = 1800
+
+
 class ResearchOrchestrator:
     """
-    Coordinates the Level 2 Adversarial Validation System.
+    Coordinates the Level 3 Active Data Acquisition + Level 2 Adversarial Validation pipeline.
     Streams real-time event logs for live UI updates via SSE.
+    Supports pipeline pause/resume on critical data gaps.
     """
 
     def __init__(self, working_dir: Optional[str] = None, charts_dir: Optional[str] = None):
@@ -44,6 +53,7 @@ class ResearchOrchestrator:
         self.charts_dir = charts_dir or os.path.join(self.working_dir, "backend", "charts")
 
         self.profiler = DataProfilerAgent()
+        self.gap_analyzer = DataGapAnalysisAgent()
         self.hypothesizer = HypothesizerAgent()
         self.code_engineer = CodeEngineerAgent()
         self.validator = StatisticalValidatorAgent()
@@ -53,6 +63,7 @@ class ResearchOrchestrator:
         self.reporter = ScienceWriterAgent()
         self.chart_generator = ChartGeneratorAgent(charts_dir=self.charts_dir)
         self.sandbox = PythonSandbox(working_dir=self.working_dir)
+        self.merger = DataMergeEngine(working_dir=self.working_dir)
         self.memory = get_memory()
 
     def run_investigation(
@@ -63,10 +74,21 @@ class ResearchOrchestrator:
         task_type_override: Optional[str] = None,
         llm_provider: Optional[LLMProvider] = None,
         event_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+        # Level 3 pause/resume control
+        pause_event: Optional[threading.Event] = None,
+        session_state: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """Run the full 8-agent adversarial scientific discovery pipeline on a single dataset."""
+        """
+        Run the full 9-agent Level 3 scientific discovery pipeline.
+
+        pause_event: threading.Event set by /provide-data or /skip-gap endpoints to resume pipeline.
+        session_state: shared dict (from sessions[sid]) used to inject enriched_csv_path and skip flags.
+        """
 
         dataset_name = os.path.basename(csv_path)
+        enrichment_info = None   # filled if dataset is enriched
+        skipped_gaps = []        # gaps user chose to skip
+        limitation_flags = []    # warnings added to findings due to skipped gaps
 
         def emit(stage: str, agent: str, message: str, payload: Optional[Any] = None):
             sanitized_payload = sanitize_val(payload) if payload else None
@@ -95,10 +117,177 @@ class ResearchOrchestrator:
 
         mem_stats = self.memory.get_memory_stats()
         emit("PROFILING", "DataProfilerAgent",
-             f"Profile complete: {profile['num_rows']} rows × {profile['num_cols']} cols. "
+             f"Profile complete: {profile['num_rows']} rows x {profile['num_cols']} cols. "
              f"Target: '{active_target}' ({active_task}). "
              f"Vector memory: {mem_stats.get('total_records', 0)} prior records.",
              payload={"profile_summary": profile, "memory_stats": mem_stats})
+
+        # Generate preliminary hypotheses (needed by gap analyzer for context)
+        llm_name = llm_provider.config["display_name"] if llm_provider else "Heuristic Engine"
+        emit("HYPOTHESIZING", "HypothesizerAgent",
+             f"Generating preliminary hypotheses for gap analysis context using {llm_name}...")
+
+        preliminary_hypotheses = sanitize_val(self.hypothesizer.generate_hypotheses(
+            profile,
+            domain_context=domain_context,
+            llm_provider=llm_provider,
+            dataset_name=dataset_name,
+        ))
+
+        # ── Stage 2: Data Gap Analysis (Level 3) ─────────────────────────────
+        emit("DATA_GAP_ANALYSIS", "DataGapAnalysisAgent",
+             "Running data sufficiency review — scanning for missing variables, "
+             "incomplete time coverage, and absent comparison groups...")
+
+        gap_report = sanitize_val(self.gap_analyzer.analyze_gaps(
+            profile=profile,
+            hypotheses=preliminary_hypotheses,
+            domain_context=domain_context,
+            llm_provider=llm_provider,
+        ))
+
+        critical_gaps = [g for g in gap_report.get("gaps", []) if g.get("priority") == "CRITICAL"]
+        important_gaps = [g for g in gap_report.get("gaps", []) if g.get("priority") == "IMPORTANT"]
+        optional_gaps = [g for g in gap_report.get("gaps", []) if g.get("priority") == "OPTIONAL"]
+
+        emit("DATA_GAP_ANALYSIS", "DataGapAnalysisAgent",
+             f"Data sufficiency analysis complete: {len(critical_gaps)} critical, "
+             f"{len(important_gaps)} important, {len(optional_gaps)} optional gaps identified. "
+             f"Pipeline action: {gap_report.get('pipeline_action', 'CONTINUE')}.",
+             payload={"gap_report": gap_report})
+
+        # ── Handle Critical Gaps — PAUSE PIPELINE ────────────────────────────
+        if critical_gaps and pause_event is not None and session_state is not None:
+            for gap in critical_gaps:
+                emit("DATA_REQUEST", "DataGapAnalysisAgent",
+                     f"[CRITICAL GAP] Pipeline paused — '{gap['title']}'. "
+                     f"Investigation cannot proceed without this data.",
+                     payload={
+                         "gap": gap,
+                         "gap_type": "CRITICAL",
+                         "paused": True,
+                         "action_required": "Upload supplemental CSV via the Data Request panel",
+                     })
+
+                # Store which gap is blocking in shared session state
+                session_state["paused_for_gap"] = gap
+                session_state["status"] = "paused"
+
+                # Wait for user to provide data or skip
+                got_data = pause_event.wait(timeout=DATA_REQUEST_TIMEOUT_SECONDS)
+                pause_event.clear()
+
+                if not got_data:
+                    emit("DATA_REQUEST", "DataGapAnalysisAgent",
+                         f"Timeout waiting for data. Continuing without critical gap data — "
+                         f"findings will carry invalidation warnings.")
+                    limitation_flags.append(f"CRITICAL gap '{gap['title']}' not resolved — findings may be invalid.")
+                    continue
+
+                # Check if user provided enriched CSV
+                enriched_path = session_state.get("enriched_csv")
+                skipped = session_state.get("last_action") == "skip"
+
+                if skipped:
+                    emit("DATA_REQUEST", "DataGapAnalysisAgent",
+                         f"User skipped critical gap '{gap['title']}'. "
+                         f"All downstream findings will be flagged as potentially invalid.")
+                    skipped_gaps.append(gap)
+                    limitation_flags.append(
+                        f"CRITICAL gap skipped: '{gap['title']}' — {gap.get('why_it_matters', '')}"
+                    )
+                elif enriched_path and os.path.exists(enriched_path):
+                    merge_result = self._apply_enrichment(
+                        csv_path, enriched_path, emit, gap
+                    )
+                    if merge_result["success"]:
+                        csv_path = merge_result["enriched_csv_path"]
+                        dataset_name = os.path.basename(csv_path)
+                        enrichment_info = merge_result
+
+                        # Re-profile enriched dataset
+                        emit("PROFILING", "DataProfilerAgent",
+                             f"Re-profiling enriched dataset ({merge_result['enriched_shape'][1]} columns)...")
+                        profile = sanitize_val(self.profiler.profile_csv(
+                            csv_path,
+                            target_override=active_target,
+                            task_type_override=active_task,
+                        ))
+                        emit("PROFILING", "DataProfilerAgent",
+                             f"Enriched profile complete: {profile['num_rows']} rows x {profile['num_cols']} cols.",
+                             payload={"profile_summary": profile, "enrichment_info": enrichment_info})
+
+        # ── Handle Important Gaps — WARN but continue ─────────────────────────
+        if important_gaps and pause_event is not None and session_state is not None:
+            for gap in important_gaps:
+                emit("DATA_REQUEST", "DataGapAnalysisAgent",
+                     f"[IMPORTANT GAP] '{gap['title']}' — providing supplemental data will strengthen findings. "
+                     f"Investigation continues with limitations.",
+                     payload={
+                         "gap": gap,
+                         "gap_type": "IMPORTANT",
+                         "paused": False,
+                         "action_required": "Optionally upload supplemental CSV via the Data Request panel",
+                     })
+
+                # Short wait (10 seconds) to see if user uploads immediately
+                session_state["paused_for_gap"] = gap
+                got_data = pause_event.wait(timeout=10)
+                pause_event.clear()
+
+                if got_data:
+                    enriched_path = session_state.get("enriched_csv")
+                    skipped = session_state.get("last_action") == "skip"
+                    if not skipped and enriched_path and os.path.exists(enriched_path):
+                        merge_result = self._apply_enrichment(csv_path, enriched_path, emit, gap)
+                        if merge_result["success"]:
+                            csv_path = merge_result["enriched_csv_path"]
+                            dataset_name = os.path.basename(csv_path)
+                            enrichment_info = merge_result
+                            profile = sanitize_val(self.profiler.profile_csv(
+                                csv_path,
+                                target_override=active_target,
+                                task_type_override=active_task,
+                            ))
+                            emit("PROFILING", "DataProfilerAgent",
+                                 f"Enriched dataset active: {profile['num_cols']} cols.",
+                                 payload={"profile_summary": profile, "enrichment_info": enrichment_info})
+                    else:
+                        skipped_gaps.append(gap)
+                        limitation_flags.append(
+                            f"Important gap skipped: '{gap['title']}' — {gap.get('why_it_matters', '')}"
+                        )
+                else:
+                    # User didn't respond in time — continue with warning
+                    skipped_gaps.append(gap)
+                    limitation_flags.append(
+                        f"Important gap unresolved: '{gap['title']}' — {gap.get('why_it_matters', '')}"
+                    )
+
+                session_state["paused_for_gap"] = None
+
+        if optional_gaps:
+            emit("DATA_GAP_ANALYSIS", "DataGapAnalysisAgent",
+                 f"{len(optional_gaps)} optional data enhancement opportunity(ies) noted in the final report.")
+
+        # ── Stage 3: Final Hypothesis Generation on (enriched) profile ───────
+        emit("HYPOTHESIZING", "HypothesizerAgent",
+             f"Formulating final testable hypotheses using {llm_name}...")
+
+        # Re-generate on enriched profile if data changed
+        if enrichment_info:
+            hypotheses = sanitize_val(self.hypothesizer.generate_hypotheses(
+                profile,
+                domain_context=domain_context,
+                llm_provider=llm_provider,
+                dataset_name=dataset_name,
+            ))
+        else:
+            hypotheses = preliminary_hypotheses
+
+        emit("HYPOTHESIZING", "HypothesizerAgent",
+             f"Generated {len(hypotheses)} novel hypotheses (memory-filtered).",
+             payload={"hypotheses": hypotheses})
 
         # Generate global exploratory charts
         df = pd.read_csv(csv_path)
@@ -107,7 +296,7 @@ class ResearchOrchestrator:
         heatmap_file = self.chart_generator.generate_correlation_heatmap(df, dataset_name)
         if heatmap_file:
             global_charts["correlation_heatmap"] = heatmap_file
-            emit("PROFILING", "DataProfilerAgent", "Generated feature correlation heatmap chart.")
+            emit("PROFILING", "DataProfilerAgent", "Generated feature correlation heatmap.")
 
         target_dist_file = self.chart_generator.generate_target_distribution(
             df, active_target, active_task, dataset_name
@@ -116,22 +305,7 @@ class ResearchOrchestrator:
             global_charts["target_distribution"] = target_dist_file
             emit("PROFILING", "DataProfilerAgent", "Generated target distribution chart.")
 
-        # ── Stage 2: Hypothesis Generation ──────────────────────────────────
-        llm_name = llm_provider.config["display_name"] if llm_provider else "Heuristic Engine"
-        emit("HYPOTHESIZING", "HypothesizerAgent",
-             f"Querying ChromaDB memory and formulating testable hypotheses using {llm_name}...")
-
-        hypotheses = sanitize_val(self.hypothesizer.generate_hypotheses(
-            profile,
-            domain_context=domain_context,
-            llm_provider=llm_provider,
-            dataset_name=dataset_name,
-        ))
-        emit("HYPOTHESIZING", "HypothesizerAgent",
-             f"Generated {len(hypotheses)} novel hypotheses (memory-filtered).",
-             payload={"hypotheses": hypotheses})
-
-        # ── Stage 3: Sandbox Execution + Chart Generation ────────────────────
+        # ── Stage 4: Sandbox Execution + Chart Generation ─────────────────────
         emit("EXPERIMENTATION", "CodeEngineerAgent",
              "Generating Python test scripts and executing in isolated AST sandbox...")
 
@@ -155,9 +329,7 @@ class ResearchOrchestrator:
 
             chart_file = None
             try:
-                chart_file = self.chart_generator.generate_chart_for_hypothesis(
-                    df, h, sanitized_res
-                )
+                chart_file = self.chart_generator.generate_chart_for_hypothesis(df, h, sanitized_res)
                 if chart_file:
                     emit("EXPERIMENTATION", "ChartGeneratorAgent",
                          f"Rendered statistical chart for [{h['id']}].")
@@ -175,12 +347,13 @@ class ResearchOrchestrator:
                 "generated_code": script,
                 "execution_result": sanitized_res,
                 "chart_file": chart_file,
+                "from_enriched_data": enrichment_info is not None,
             })
 
             emit("EXPERIMENTATION", "PythonSandbox",
                  f"[{h['id']}] execution complete (p={p_val:.4f}).")
 
-        # ── Stage 4: Statistical Validation ──────────────────────────────────
+        # ── Stage 5: Statistical Validation ───────────────────────────────────
         emit("VALIDATION", "StatisticalValidatorAgent",
              "Applying Benjamini-Hochberg FDR correction and verifying effect sizes...")
 
@@ -192,15 +365,20 @@ class ResearchOrchestrator:
         }
         for finding in validation.get("findings", []):
             finding["chart_file"] = chart_map.get(finding["hypothesis_id"])
+            finding["from_enriched_data"] = enrichment_info is not None
+            # Attach limitation flags to every finding if gaps were skipped
+            if limitation_flags:
+                finding["limitation_flags"] = limitation_flags
 
         emit("VALIDATION", "StatisticalValidatorAgent",
              f"FDR validation: {validation['confirmed_discoveries']} passed alpha={validation['fdr_alpha_used']}, "
              f"{validation['rejected_count']} rejected.",
              payload={"validation": validation})
 
-        # ── Stage 5: Adversarial Peer Review (Level 2) ────────────────────────
+        # ── Stage 6: Adversarial Peer Review (Level 2) ────────────────────────
         emit("ADVERSARIAL_REVIEW", "FalsificationAgent",
-             "Initiating Level 2 Adversarial Validation System (Popperian Falsification → Corroboration → Arbitration)...")
+             "Initiating Level 2 Adversarial Validation System "
+             "(Popperian Falsification -> Corroboration -> Arbitration)...")
 
         adversarial_reviews = []
         tier1_findings = []
@@ -215,9 +393,9 @@ class ResearchOrchestrator:
             if not h_obj or not stat_res:
                 continue
 
-            # 5a: Falsification Agent (Popperian Challenger)
             emit("ADVERSARIAL_FALSIFY", "FalsificationAgent",
-                 f"🔴 [FalsificationAgent] Stress-testing [{h_id}]: Generating empirical challenges citing dataset values...")
+                 f"[FalsificationAgent] Stress-testing [{h_id}]: "
+                 f"Generating empirical challenges citing dataset values...")
 
             falsification_report = sanitize_val(self.falsifier.challenge_finding(
                 hypothesis=h_obj,
@@ -228,16 +406,16 @@ class ResearchOrchestrator:
 
             challenges_count = len(falsification_report.get("challenges", []))
             emit("ADVERSARIAL_FALSIFY", "FalsificationAgent",
-                 f"🔴 [FalsificationAgent] Raised {challenges_count} empirical challenges against [{h_id}].",
+                 f"[FalsificationAgent] Raised {challenges_count} empirical challenges against [{h_id}].",
                  payload={
                      "hypothesis_id": h_id,
                      "hypothesis_title": h_obj.get("title"),
                      "falsification": falsification_report,
                  })
 
-            # 5b: Corroboration Agent (Evidence Rebuttal)
             emit("ADVERSARIAL_CORROBORATE", "CorroborationAgent",
-                 f"🟢 [CorroborationAgent] Defending [{h_id}]: Evaluating effect sizes and constructing point-by-point rebuttal...")
+                 f"[CorroborationAgent] Defending [{h_id}]: "
+                 f"Evaluating effect sizes and constructing point-by-point rebuttal...")
 
             corroboration_report = sanitize_val(self.corroborator.defend_finding(
                 hypothesis=h_obj,
@@ -248,15 +426,16 @@ class ResearchOrchestrator:
             ))
 
             emit("ADVERSARIAL_CORROBORATE", "CorroborationAgent",
-                 f"🟢 [CorroborationAgent] Completed rebuttal for [{h_id}] ({len(corroboration_report.get('responses', []))} responses).",
+                 f"[CorroborationAgent] Completed rebuttal for [{h_id}] "
+                 f"({len(corroboration_report.get('responses', []))} responses).",
                  payload={
                      "hypothesis_id": h_id,
                      "corroboration": corroboration_report,
                  })
 
-            # 5c: Arbitration Agent (Impartial Senior Editor)
             emit("ADVERSARIAL_ARBITRATE", "ArbitrationAgent",
-                 f"🟡 [ArbitrationAgent] Reviewing adversarial record for [{h_id}] with deterministic editor arbitration...")
+                 f"[ArbitrationAgent] Reviewing adversarial record for [{h_id}] "
+                 f"with deterministic editor arbitration...")
 
             arbitration_report = sanitize_val(self.arbiter.arbitrate(
                 hypothesis=h_obj,
@@ -288,16 +467,16 @@ class ResearchOrchestrator:
 
             if verdict == "VALIDATED":
                 tier1_findings.append(finding)
-                verdict_emoji = "✅ VALIDATED (Tier 1)"
+                verdict_str = "VALIDATED (Tier 1)"
             elif verdict == "VALIDATED_WITH_CONDITIONS":
                 tier2_findings.append(finding)
-                verdict_emoji = "⚠️ VALIDATED WITH CONDITIONS (Tier 2)"
+                verdict_str = "VALIDATED WITH CONDITIONS (Tier 2)"
             else:
                 tier3_findings.append(finding)
-                verdict_emoji = "❌ INVALIDATED (Tier 3)"
+                verdict_str = "INVALIDATED (Tier 3)"
 
             emit("ADVERSARIAL_ARBITRATE", "ArbitrationAgent",
-                 f"🟡 [ArbitrationAgent] [{h_id}] Verdict: {verdict_emoji} (Confidence: {confidence}%).",
+                 f"[ArbitrationAgent] [{h_id}] Verdict: {verdict_str} (Confidence: {confidence}%).",
                  payload={
                      "hypothesis_id": h_id,
                      "verdict": verdict,
@@ -306,7 +485,7 @@ class ResearchOrchestrator:
                      "full_review_record": review_record,
                  })
 
-        # ── Stage 6: Persistent Vector Memory Storage ────────────────────────
+        # ── Stage 7: Persistent Vector Memory Storage ──────────────────────
         emit("REPORTING", "AgentMemory",
              f"Persisting {len(adversarial_reviews)} peer-reviewed findings to ChromaDB vector store...")
 
@@ -316,15 +495,19 @@ class ResearchOrchestrator:
             if finding:
                 self.memory.store_result(dataset_name, h, finding)
 
-        # ── Stage 7: Reporting & Disk Artifact Persistence ────────────────────
+        # ── Stage 8: Reporting & Disk Artifact Persistence ─────────────────
         emit("REPORTING", "ScienceWriterAgent",
-             "Synthesizing 3-Tier Executive Report, reproducible Jupyter Notebook, and Adversarial Transcript...")
+             "Synthesizing 3-Tier Executive Report, reproducible Jupyter Notebook, "
+             "and Adversarial Transcript...")
 
         markdown_report = self.reporter.generate_markdown_report(
             profile=profile,
             validation=validation,
             adversarial_reviews=adversarial_reviews,
             dataset_name=dataset_name,
+            enrichment_info=enrichment_info,
+            skipped_gaps=skipped_gaps,
+            optional_gaps=optional_gaps,
         )
 
         clean_name = dataset_name.replace(".csv", "").replace(" ", "_")
@@ -338,7 +521,6 @@ class ResearchOrchestrator:
             adversarial_reviews=adversarial_reviews,
         )
 
-        # Save complete adversarial peer review transcript to disk
         transcript_path = os.path.join(self.working_dir, f"adversarial_transcript_{clean_name}.json")
         try:
             with open(transcript_path, "w", encoding="utf-8") as tf:
@@ -349,7 +531,10 @@ class ResearchOrchestrator:
             print(f"[Orchestrator] Could not save transcript: {e}")
 
         emit("REPORTING", "ScienceWriterAgent",
-             f"Investigation complete! Tier 1: {len(tier1_findings)} | Tier 2: {len(tier2_findings)} | Tier 3: {len(tier3_findings)}.")
+             f"Investigation complete! "
+             f"Tier 1: {len(tier1_findings)} | "
+             f"Tier 2: {len(tier2_findings)} | "
+             f"Tier 3: {len(tier3_findings)}.")
 
         return sanitize_val({
             "dataset_name": dataset_name,
@@ -365,7 +550,39 @@ class ResearchOrchestrator:
             "notebook_path": output_ipynb_path,
             "transcript_path": transcript_path,
             "global_charts": global_charts,
+            "gap_report": gap_report,
+            "enrichment_info": enrichment_info,
+            "skipped_gaps": skipped_gaps,
+            "optional_gaps": optional_gaps,
+            "limitation_flags": limitation_flags,
         })
+
+    def _apply_enrichment(
+        self,
+        original_csv: str,
+        supplemental_csv: str,
+        emit: Callable,
+        gap: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Run DataMergeEngine and emit progress events."""
+        emit("DATA_GAP_ANALYSIS", "DataMergeEngine",
+             f"Merging supplemental data for gap '{gap['title']}'...")
+
+        merge_result = self.merger.merge(
+            original_csv_path=original_csv,
+            supplemental_csv_path=supplemental_csv,
+            gap_info=gap,
+        )
+
+        if merge_result["success"]:
+            emit("DATA_GAP_ANALYSIS", "DataMergeEngine",
+                 f"Enrichment successful: {merge_result['message']}",
+                 payload={"enrichment_info": merge_result})
+        else:
+            emit("DATA_GAP_ANALYSIS", "DataMergeEngine",
+                 f"Enrichment failed: {merge_result['message']}")
+
+        return merge_result
 
     def run_comparison(
         self,
@@ -408,7 +625,6 @@ class ResearchOrchestrator:
             event_callback=lambda e: event_callback({**e, "dataset": "B"}) if event_callback else None,
         )
 
-        # Cross-validation across Tier 1 + Tier 2 findings
         confirmed_a = {
             f["title"].lower().strip(): f
             for f in (results_a.get("tier1_findings", []) + results_a.get("tier2_findings", []))
@@ -438,7 +654,8 @@ class ResearchOrchestrator:
                 b_only.append({**finding, "verdict": "DATASET_B_ONLY"})
 
         emit("REPORTING", "ScienceWriterAgent",
-             f"Comparison complete. Replicated: {len(cross_validated)}, A-only: {len(a_only)}, B-only: {len(b_only)}.")
+             f"Comparison complete. Replicated: {len(cross_validated)}, "
+             f"A-only: {len(a_only)}, B-only: {len(b_only)}.")
 
         return sanitize_val({
             "dataset_a": name_a,

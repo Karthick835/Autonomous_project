@@ -1,581 +1,444 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState } from 'react';
 import {
-  Award, CheckCircle2, XCircle, Download, BarChart3,
-  ChevronDown, ChevronUp, FileCode, TrendingUp, AlertTriangle,
-  ExternalLink, Database, Scale, ShieldAlert, Sparkles
+  Download, Award, AlertTriangle, XCircle, CheckCircle2,
+  ChevronDown, ChevronUp, BarChart2, ShieldCheck, Scale,
+  BookOpen, Sparkles, Layers, Search, Info
 } from 'lucide-react';
-import {
-  RadarChart, Radar, PolarGrid, PolarAngleAxis, PolarRadiusAxis,
-  ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, Cell
-} from 'recharts';
-import ReactMarkdown from 'react-markdown';
 
 const API = 'http://127.0.0.1:5050';
 
-function CountUp({ target, decimals = 0, suffix = '' }) {
-  const [val, setVal] = useState(0);
-  useEffect(() => {
-    let start = 0;
-    const steps = 40;
-    const delta = target / steps;
-    const timer = setInterval(() => {
-      start = Math.min(start + delta, target);
-      setVal(start);
-      if (start >= target) clearInterval(timer);
-    }, 20);
-    return () => clearInterval(timer);
-  }, [target]);
-  return (
-    <span className="count-up">
-      {decimals > 0 ? val.toFixed(decimals) : Math.round(val)}{suffix}
-    </span>
-  );
-}
-
-function DiscoveryCeremony({ count, onDismiss }) {
-  const particles = Array.from({ length: 20 }, (_, i) => ({
-    id: i,
-    tx: `${(Math.random() - 0.5) * 400}px`,
-    ty: `${(Math.random() - 0.5) * 400}px`,
-    color: ['#7C3AED', '#06B6D4', '#10B981', '#F59E0B', '#EF4444'][i % 5],
-    delay: `${Math.random() * 0.5}s`,
-  }));
-
-  return (
-    <div className="ceremony-overlay" onClick={onDismiss}>
-      <div className="ceremony-particles">
-        {particles.map(p => (
-          <div key={p.id} className="particle" style={{
-            '--tx': p.tx,
-            '--ty': p.ty,
-            background: p.color,
-            left: '50%',
-            top: '50%',
-            animationDelay: p.delay,
-            animationDuration: `${0.8 + Math.random() * 0.6}s`,
-          }} />
-        ))}
-      </div>
-      <div className="card ceremony-card card-glow-border">
-        <div className="ceremony-icon">🔬</div>
-        <h2 style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 'var(--space-2)' }}>
-          Adversarial Peer Review Complete
-        </h2>
-        <p style={{ color: 'var(--text-secondary)', fontSize: 14, marginBottom: 'var(--space-6)', lineHeight: 1.6 }}>
-          The Level 2 validation engine confirmed <strong style={{ color: 'var(--accent-green)' }}>{count} robust discovery(ies)</strong> that successfully survived Karl Popper falsification challenges and editorial arbitration.
-        </p>
-        <button className="btn btn-primary btn-lg" onClick={onDismiss}>
-          View Peer-Reviewed Findings →
-        </button>
-        <div style={{ marginTop: 'var(--space-3)', fontSize: 11, color: 'var(--text-tertiary)' }}>
-          Click anywhere to dismiss
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function TieredHypothesisCard({ finding, tier, chartBase }) {
-  const [expanded, setExpanded] = useState(false);
-
-  const isTier1 = tier === 1 || finding.verdict === 'VALIDATED';
-  const isTier2 = tier === 2 || finding.verdict === 'VALIDATED_WITH_CONDITIONS';
-  const isTier3 = tier === 3 || finding.verdict === 'INVALIDATED' || finding.status === 'REJECTED';
-
-  const statusClass = isTier1 ? 'confirmed' : isTier2 ? 'weak' : 'rejected';
-  const effectPct = Math.min(finding.effect_size * 100, 100);
-
-  return (
-    <div
-      id={`finding-${finding.hypothesis_id}`}
-      className={`hypothesis-card ${statusClass}`}
-      onClick={() => setExpanded(!expanded)}
-    >
-      <div className="flex items-start justify-between gap-4">
-        <div style={{ flex: 1 }}>
-          <div className="flex items-center gap-2" style={{ marginBottom: 'var(--space-1)' }}>
-            <span style={{ fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-tertiary)', fontWeight: 600 }}>
-              {finding.hypothesis_id}
-            </span>
-            <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
-              {finding.category}
-            </span>
-            {isTier1 && <span className="tier-badge tier-badge-1">✅ Tier 1: Validated</span>}
-            {isTier2 && <span className="tier-badge tier-badge-2">⚠️ Tier 2: Conditional</span>}
-            {isTier3 && <span className="tier-badge tier-badge-3">❌ Tier 3: Invalidated</span>}
-          </div>
-
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.4 }}>
-            {finding.title}
-          </h3>
-
-          <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 'var(--space-1)', lineHeight: 1.5 }}>
-            {finding.summary}
-          </p>
-
-          {/* Editorial reasoning citation */}
-          {finding.editorial_reasoning && (
-            <div style={{ fontSize: 11, color: 'var(--accent-cyan)', fontStyle: 'italic', marginTop: 'var(--space-2)' }}>
-              Editorial Arbiter: "{finding.editorial_reasoning}"
-            </div>
-          )}
-
-          {/* Effect size bar */}
-          <div style={{ marginTop: 'var(--space-2)' }}>
-            <div className="flex justify-between" style={{ marginBottom: 3, fontSize: 10, color: 'var(--text-tertiary)' }}>
-              <span>{finding.effect_size_metric}</span>
-              <span style={{ fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>
-                {finding.effect_size.toFixed(3)}
-              </span>
-            </div>
-            <div className="effect-bar">
-              <div
-                className={`effect-bar-fill ${statusClass}`}
-                style={{
-                  width: `${effectPct}%`,
-                  background: isTier1
-                    ? 'linear-gradient(90deg, #059669, var(--accent-green))'
-                    : isTier2
-                    ? 'linear-gradient(90deg, #B45309, var(--accent-amber))'
-                    : 'linear-gradient(90deg, #DC2626, var(--accent-rose))',
-                }}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="flex-col items-center gap-2" style={{ minWidth: 120 }}>
-          {finding.confidence_score && (
-            <span className="pill pill-violet" style={{ fontSize: 10, fontFamily: 'var(--font-mono)' }}>
-              {finding.confidence_score}% Conf.
-            </span>
-          )}
-
-          <div style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 11,
-            padding: '3px 8px',
-            background: 'var(--bg-elevated)',
-            border: '1px solid var(--card-border)',
-            borderRadius: 'var(--radius-full)',
-            color: finding.p_value < 0.05 ? 'var(--accent-green)' : 'var(--accent-rose)',
-          }}>
-            p={finding.p_value.toFixed(4)}
-          </div>
-
-          <button className="btn btn-ghost" style={{ fontSize: 10, padding: '4px 8px', height: 'auto' }}>
-            {expanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
-            {expanded ? 'Less' : 'Review Details'}
-          </button>
-        </div>
-      </div>
-
-      {/* Conditions for Tier 2 */}
-      {isTier2 && finding.arbitration_conditions?.length > 0 && (
-        <div className="conditions-drawer">
-          <div className="conditions-drawer-title">
-            <AlertTriangle size={12} /> Stated Peer Review Limitations:
-          </div>
-          {finding.arbitration_conditions.map((cond, i) => (
-            <div key={i} style={{ marginBottom: 2 }}>• {cond}</div>
-          ))}
-        </div>
-      )}
-
-      {/* Expanded details */}
-      {expanded && (
-        <div className="fade-in" style={{
-          marginTop: 'var(--space-4)',
-          paddingTop: 'var(--space-4)',
-          borderTop: '1px solid var(--card-border)',
-        }}>
-          <div className="flex gap-4" style={{ marginBottom: 'var(--space-4)', flexWrap: 'wrap' }}>
-            {[
-              { label: 'P-Value', value: finding.p_value.toFixed(5), color: finding.p_value < 0.05 ? 'var(--accent-green)' : 'var(--accent-rose)' },
-              { label: 'Effect Size', value: `${finding.effect_size.toFixed(3)} (${finding.effect_size_metric})`, color: 'var(--accent-violet)' },
-              { label: 'FDR Significant', value: finding.fdr_significant ? 'Yes' : 'No', color: finding.fdr_significant ? 'var(--accent-green)' : 'var(--accent-rose)' },
-              { label: 'Editorial Verdict', value: finding.verdict || finding.status, color: isTier1 ? 'var(--accent-green)' : isTier2 ? 'var(--accent-amber)' : 'var(--accent-rose)' },
-            ].map((s, i) => (
-              <div key={i} style={{
-                padding: 'var(--space-2) var(--space-3)',
-                background: 'var(--bg-elevated)',
-                border: '1px solid var(--card-border)',
-                borderRadius: 'var(--radius-md)',
-                fontSize: 12,
-              }}>
-                <div style={{ fontSize: 10, color: 'var(--text-tertiary)', marginBottom: 2 }}>{s.label}</div>
-                <div style={{ fontFamily: 'var(--font-mono)', color: s.color, fontWeight: 600 }}>{s.value}</div>
-              </div>
-            ))}
-          </div>
-
-          {finding.chart_file && (
-            <div className="chart-container">
-              <div className="chart-header">
-                <span style={{ fontSize: 11, color: 'var(--text-secondary)', fontWeight: 600 }}>
-                  Statistical Chart — {finding.hypothesis_id}
-                </span>
-                <a
-                  href={`${API}/api/charts/${finding.chart_file}`}
-                  download
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={e => e.stopPropagation()}
-                  style={{ color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 4, fontSize: 11 }}
-                >
-                  <ExternalLink size={12} /> Download
-                </a>
-              </div>
-              <img
-                src={`${API}/api/charts/${finding.chart_file}`}
-                alt={`Chart for ${finding.hypothesis_id}`}
-                className="chart-img"
-                onError={e => { e.target.style.display = 'none'; }}
-              />
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 export default function ReportViewer({ results, sessionId }) {
-  const [showCeremony, setShowCeremony] = useState(false);
-  const [activeTab, setActiveTab] = useState('findings');
-  const [tierFilter, setTierFilter] = useState('all');
-  const ceremonyShownRef = useRef(false);
+  const [activeTab, setActiveTab] = useState('tiered'); // 'tiered' | 'raw_markdown'
+  const [expandedTiers, setExpandedTiers] = useState({
+    tier1: true,
+    tier2: true,
+    tier3: false, // collapsed by default as requested
+  });
+  const [expandedConditions, setExpandedConditions] = useState({});
 
-  const { validation, profile, dataset_name, markdown_report, global_charts, tier1_findings, tier2_findings, tier3_findings } = results || {};
+  if (!results) {
+    return (
+      <div className="card" style={{ padding: 'var(--space-8)', textAlign: 'center' }}>
+        <p className="text-muted">No investigation results to display. Run an investigation first.</p>
+      </div>
+    );
+  }
 
-  const allFindings = validation?.findings || [];
-  const tier1 = tier1_findings || allFindings.filter(f => f.verdict === 'VALIDATED' || (f.status === 'CONFIRMED_DISCOVERY' && !f.verdict));
-  const tier2 = tier2_findings || allFindings.filter(f => f.verdict === 'VALIDATED_WITH_CONDITIONS');
-  const tier3 = tier3_findings || allFindings.filter(f => f.verdict === 'INVALIDATED' || f.status === 'REJECTED');
+  const {
+    tier1_findings = [],
+    tier2_findings = [],
+    tier3_findings = [],
+    profile = {},
+    dataset_name = 'Dataset',
+    markdown_report = '',
+    adversarial_reviews = [],
+    enrichment_info = null,
+    skipped_gaps = [],
+    optional_gaps = [],
+  } = results;
 
-  useEffect(() => {
-    if (!validation || ceremonyShownRef.current) return;
-    if (tier1.length + tier2.length > 0) {
-      ceremonyShownRef.current = true;
-      setTimeout(() => setShowCeremony(true), 600);
-    }
-  }, [validation, tier1, tier2]);
+  const reviewMap = {};
+  (adversarial_reviews || []).forEach((r) => {
+    reviewMap[r.hypothesis_id] = r;
+  });
 
-  if (!results) return null;
+  const toggleTier = (t) => {
+    setExpandedTiers((p) => ({ ...p, [t]: !p[t] }));
+  };
 
-  const maxEffect = Math.max(...allFindings.map(f => f.effect_size), 0.01);
-  const radarData = allFindings.map(f => ({
-    name: f.hypothesis_id,
-    label: f.title.length > 18 ? f.title.slice(0, 16) + '…' : f.title,
-    value: (f.effect_size / maxEffect) * 100,
-    pValue: f.p_value,
-    status: f.verdict || f.status,
-    metric: f.effect_size_metric,
-    rawEffect: f.effect_size,
-  }));
+  const toggleCondition = (hid) => {
+    setExpandedConditions((p) => ({ ...p, [hid]: !p[hid] }));
+  };
 
-  const handleDownload = () => {
+  const downloadMarkdown = () => {
+    const blob = new Blob([markdown_report], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `research_report_${dataset_name.replace('.csv', '')}.md`;
+    a.click();
+  };
+
+  const downloadNotebook = () => {
     window.open(`${API}/api/download-notebook/${sessionId}`, '_blank');
   };
 
-  const TABS = [
-    { id: 'findings', label: 'Peer-Reviewed Findings', icon: <Scale size={14} /> },
-    { id: 'charts',   label: 'Statistical Charts',    icon: <BarChart3 size={14} /> },
-    { id: 'report',   label: 'Executive Report',      icon: <FileCode size={14} /> },
-  ];
-
   return (
     <div className="fade-in" style={{ maxWidth: 1120, margin: '0 auto' }}>
-      {showCeremony && (
-        <DiscoveryCeremony
-          count={tier1.length + tier2.length}
-          onDismiss={() => setShowCeremony(false)}
-        />
-      )}
-
-      {/* ── Summary Header ── */}
+      {/* ── Top Header & Actions ── */}
       <div className="card" style={{ padding: 'var(--space-6)', marginBottom: 'var(--space-5)' }}>
-        <div className="flex items-start justify-between" style={{ marginBottom: 'var(--space-5)' }}>
+        <div className="flex items-center justify-between" style={{ flexWrap: 'wrap', gap: 'var(--space-3)' }}>
           <div>
-            <div className="flex items-center gap-2" style={{ marginBottom: 'var(--space-2)' }}>
+            <div className="flex items-center gap-2">
               <Award size={20} color="var(--accent-green)" />
-              <h1 style={{ fontSize: 18, fontWeight: 800, letterSpacing: '-0.02em' }}>
-                Peer-Reviewed Discoveries: <span style={{ color: 'var(--accent-cyan)', fontFamily: 'var(--font-mono)', fontSize: 16 }}>{dataset_name}</span>
-              </h1>
+              <h2 style={{ fontSize: 18, fontWeight: 800 }}>Peer-Reviewed Scientific Report</h2>
+              {enrichment_info?.success && (
+                <span className="pill pill-green" style={{ fontSize: 11, gap: 4 }}>
+                  <Sparkles size={11} /> Enriched Dataset
+                </span>
+              )}
             </div>
-            <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-              Target: <span style={{ color: 'var(--accent-green)', fontFamily: 'var(--font-mono)' }}>{profile.active_target}</span>
-              &nbsp;·&nbsp;{profile.active_task}
-              &nbsp;·&nbsp;FDR α = {validation.fdr_alpha_used}
-              &nbsp;·&nbsp;{profile.num_rows?.toLocaleString()} rows
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
+              Dataset: <code style={{ color: 'var(--accent-cyan)' }}>{dataset_name}</code> ·
+              Target: <code style={{ color: 'var(--accent-green)' }}>{profile.active_target}</code> ({profile.active_task}) ·
+              N={profile.num_rows} observations
             </div>
           </div>
-          <button id="download-notebook-btn" className="btn btn-primary" onClick={handleDownload}>
-            <Download size={14} />
-            Download Notebook
-          </button>
+
+          <div className="flex gap-2">
+            <button className="btn btn-secondary" onClick={downloadMarkdown} style={{ fontSize: 12 }}>
+              <Download size={13} />
+              Markdown Report
+            </button>
+            <button className="btn btn-primary" onClick={downloadNotebook} style={{ fontSize: 12 }}>
+              <BookOpen size={13} />
+              Jupyter Notebook (.ipynb)
+            </button>
+          </div>
         </div>
 
-        {/* 3-Tier Stat Cards */}
-        <div className="grid-4">
-          <div className="stat-card">
-            <div className="stat-card-label">Tier 1 (Validated)</div>
-            <div className="stat-card-value confirmed">
-              <CountUp target={tier1.length} />
-            </div>
+        {/* Level 3 Enrichment Banner */}
+        {enrichment_info?.success && (
+          <div style={{
+            marginTop: 'var(--space-4)',
+            padding: '10px 14px',
+            background: 'var(--accent-green-dim)',
+            border: '1px solid var(--accent-green-mid)',
+            borderRadius: 'var(--radius-md)',
+            fontSize: 12,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            color: 'var(--accent-green)'
+          }}>
+            <Layers size={16} />
+            <span>
+              <strong>Active Data Acquisition:</strong> Integrated {enrichment_info.new_columns?.length || 0} supplemental variables
+              ({enrichment_info.new_columns?.join(', ')}) via {enrichment_info.strategy} strategy on keys <code>{enrichment_info.merge_keys?.join(', ')}</code>.
+            </span>
           </div>
-          <div className="stat-card">
-            <div className="stat-card-label">Tier 2 (Conditional)</div>
-            <div className="stat-card-value amber">
-              <CountUp target={tier2.length} />
+        )}
+
+        {/* Level 3 Skipped Data Limitations Banner */}
+        {skipped_gaps?.length > 0 && (
+          <div style={{
+            marginTop: 'var(--space-3)',
+            padding: '10px 14px',
+            background: 'var(--accent-amber-dim)',
+            border: '1px solid rgba(245,158,11,0.3)',
+            borderRadius: 'var(--radius-md)',
+            fontSize: 12,
+            color: 'var(--text-secondary)'
+          }}>
+            <div style={{ color: 'var(--accent-amber)', fontWeight: 700, marginBottom: 4 }}>
+              ⚠️ Active Data Sufficiency Limitations:
             </div>
+            {skipped_gaps.map((g, i) => (
+              <div key={i} style={{ fontSize: 11 }}>
+                • <strong>{g.title}</strong>: {g.why_it_matters}
+              </div>
+            ))}
           </div>
-          <div className="stat-card">
-            <div className="stat-card-label">Tier 3 (Invalidated)</div>
-            <div className="stat-card-value rose">
-              <CountUp target={tier3.length} />
-            </div>
+        )}
+
+        {/* Tier Scorecard Tabs */}
+        <div className="flex gap-3" style={{ marginTop: 'var(--space-4)' }}>
+          <div className="card" style={{ flex: 1, padding: 'var(--space-3)', border: '1px solid var(--accent-green-mid)', background: 'var(--accent-green-dim)' }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent-green)', textTransform: 'uppercase' }}>Tier 1: Validated</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--accent-green)' }}>{tier1_findings.length}</div>
           </div>
-          <div className="stat-card">
-            <div className="stat-card-label">Total Tested</div>
-            <div className="stat-card-value cyan">
-              <CountUp target={allFindings.length} />
-            </div>
+          <div className="card" style={{ flex: 1, padding: 'var(--space-3)', border: '1px solid rgba(245, 158, 11, 0.4)', background: 'var(--accent-amber-dim)' }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent-amber)', textTransform: 'uppercase' }}>Tier 2: Conditional</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--accent-amber)' }}>{tier2_findings.length}</div>
+          </div>
+          <div className="card" style={{ flex: 1, padding: 'var(--space-3)', border: '1px solid rgba(244, 63, 94, 0.4)', background: 'var(--accent-rose-dim)' }}>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--accent-rose)', textTransform: 'uppercase' }}>Tier 3: Invalidated</div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--accent-rose)' }}>{tier3_findings.length}</div>
           </div>
         </div>
       </div>
 
-      {/* ── Tab Navigation ── */}
-      <div className="flex gap-1" style={{
-        background: 'var(--bg-surface)',
-        border: '1px solid var(--card-border)',
-        borderRadius: 'var(--radius-lg)',
-        padding: 4,
-        marginBottom: 'var(--space-4)',
-      }}>
-        {TABS.map(t => (
-          <button
-            key={t.id}
-            id={`tab-${t.id}`}
-            onClick={() => setActiveTab(t.id)}
-            className="btn"
-            style={{
-              flex: 1,
-              background: activeTab === t.id ? 'var(--accent-violet-dim)' : 'transparent',
-              color: activeTab === t.id ? 'var(--accent-violet)' : 'var(--text-secondary)',
-              border: activeTab === t.id ? '1px solid var(--accent-violet-mid)' : '1px solid transparent',
-              height: 36,
-              borderRadius: 'var(--radius-md)',
-            }}
-          >
-            {t.icon}
-            {t.label}
-          </button>
-        ))}
+      {/* ── View Selector ── */}
+      <div className="flex gap-2" style={{ marginBottom: 'var(--space-4)' }}>
+        <button
+          className={`btn ${activeTab === 'tiered' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setActiveTab('tiered')}
+          style={{ fontSize: 12 }}
+        >
+          Structured Peer-Reviewed Tiers
+        </button>
+        <button
+          className={`btn ${activeTab === 'raw_markdown' ? 'btn-primary' : 'btn-secondary'}`}
+          onClick={() => setActiveTab('raw_markdown')}
+          style={{ fontSize: 12 }}
+        >
+          Raw Markdown Document
+        </button>
       </div>
 
-      {/* ── TAB: Findings ── */}
-      {activeTab === 'findings' && (
-        <div className="fade-in stagger">
-          {/* Radar landscape */}
-          <div className="card" style={{ padding: 'var(--space-6)', marginBottom: 'var(--space-5)' }}>
-            <div className="section-header">
-              <TrendingUp size={16} color="var(--accent-violet)" />
-              <span className="section-title">Effect Size & Robustness Landscape</span>
-            </div>
-            <div className="grid-2" style={{ gap: 'var(--space-4)' }}>
-              <div>
-                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 'var(--space-2)' }}>
-                  Normalized effect size (higher = stronger empirical magnitude)
-                </div>
-                <ResponsiveContainer width="100%" height={220}>
-                  <RadarChart data={radarData}>
-                    <PolarGrid stroke="rgba(255,255,255,0.06)" />
-                    <PolarAngleAxis dataKey="label" tick={{ fill: '#8B949E', fontSize: 10 }} />
-                    <PolarRadiusAxis tick={false} axisLine={false} domain={[0, 100]} />
-                    <Radar
-                      dataKey="value"
-                      stroke="var(--accent-violet)"
-                      fill="var(--accent-violet)"
-                      fillOpacity={0.25}
-                      strokeWidth={2}
-                    />
-                    <Tooltip
-                      contentStyle={{ background: '#161B22', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 8, fontSize: 11 }}
-                      formatter={(val, _, props) => [`${props.payload.rawEffect.toFixed(3)} (${props.payload.metric})`, 'Effect Size']}
-                    />
-                  </RadarChart>
-                </ResponsiveContainer>
+      {/* ── Tab 1: Structured Tiers ── */}
+      {activeTab === 'tiered' && (
+        <div className="flex-col gap-4">
+          {/* ── Tier 1: Validated Findings ── */}
+          <div className="tier-section">
+            <div className="tier-header" onClick={() => toggleTier('tier1')}>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 size={18} color="var(--accent-green)" />
+                <span style={{ fontWeight: 800, fontSize: 15 }}>
+                  Tier 1 — Validated Findings (Highest Confidence)
+                </span>
+                <span className="pill pill-green">{tier1_findings.length}</span>
               </div>
-
-              <div>
-                <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 'var(--space-2)' }}>
-                  Tier Categorization Overview
-                </div>
-                <div className="flex-col gap-3" style={{ marginTop: 'var(--space-2)' }}>
-                  <div style={{ padding: 'var(--space-3)', background: 'var(--accent-green-dim)', border: '1px solid var(--accent-green-mid)', borderRadius: 'var(--radius-md)' }}>
-                    <div style={{ fontWeight: 700, color: 'var(--accent-green)', fontSize: 12 }}>Tier 1: {tier1.length} Validated Discoveries</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Survived Popperian challenge without unaddressed vulnerabilities.</div>
-                  </div>
-                  <div style={{ padding: 'var(--space-3)', background: 'var(--accent-amber-dim)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 'var(--radius-md)' }}>
-                    <div style={{ fontWeight: 700, color: 'var(--accent-amber)', fontSize: 12 }}>Tier 2: {tier2.length} Conditional Discoveries</div>
-                    <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Empirically supported with explicit observational bounds.</div>
-                  </div>
-                </div>
-              </div>
+              {expandedTiers.tier1 ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </div>
-          </div>
 
-          {/* ── Tier 1 Section ── */}
-          <div style={{ marginBottom: 'var(--space-6)' }}>
-            <div className="section-header">
-              <Award size={16} color="var(--accent-green)" />
-              <span className="section-title">Tier 1 — Validated Findings (Highest Confidence)</span>
-              <span className="pill pill-green" style={{ marginLeft: 'auto' }}>
-                {tier1.length} validated
-              </span>
-            </div>
-            {tier1.length > 0 ? (
-              tier1.map(f => (
-                <TieredHypothesisCard key={f.hypothesis_id} finding={f} tier={1} chartBase={API} />
-              ))
-            ) : (
-              <div className="card" style={{ padding: 'var(--space-4)', color: 'var(--text-secondary)', fontSize: 12 }}>
-                No hypotheses achieved unconditional Tier 1 validation.
+            {expandedTiers.tier1 && (
+              <div className="tier-body">
+                {tier1_findings.length === 0 ? (
+                  <p className="text-muted" style={{ fontSize: 13 }}>No candidate hypotheses achieved unconditional Tier 1 validation.</p>
+                ) : (
+                  <div className="flex-col gap-3">
+                    {tier1_findings.map((f) => {
+                      const rev = reviewMap[f.hypothesis_id] || {};
+                      const conf = rev.arbitration?.confidence_score || f.confidence_score || 90;
+                      return (
+                        <div key={f.hypothesis_id} className="finding-card tier1-card">
+                          <div className="flex items-center justify-between" style={{ marginBottom: 'var(--space-2)' }}>
+                            <div className="flex items-center gap-2">
+                              <span className="pill pill-cyan" style={{ fontFamily: 'var(--font-mono)', fontSize: 10 }}>
+                                {f.hypothesis_id}
+                              </span>
+                              <span style={{ fontWeight: 700, fontSize: 14 }}>{f.title}</span>
+                              {f.from_enriched_data && (
+                                <span className="pill pill-green" style={{ fontSize: 9 }}>Enriched Data</span>
+                              )}
+                            </div>
+                            <span className="pill pill-green">✅ VALIDATED ({conf}%)</span>
+                          </div>
+
+                          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 'var(--space-3)', lineHeight: 1.5 }}>
+                            {f.summary || f.statement}
+                          </p>
+
+                          <div className="flex gap-4" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-tertiary)' }}>
+                            <span>Test: {f.test_type}</span>
+                            <span>P-Value: {f.p_value?.toFixed(5)}</span>
+                            <span>{f.effect_size_metric || 'Effect Size'}: {f.effect_size?.toFixed(3)}</span>
+                          </div>
+
+                          {/* Statistical Chart */}
+                          {f.chart_file && (
+                            <div className="finding-chart-box">
+                              <img
+                                src={`${API}/api/charts/${f.chart_file}`}
+                                alt={`Chart for ${f.title}`}
+                                className="finding-chart-img"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>
 
-          {/* ── Tier 2 Section ── */}
-          <div style={{ marginBottom: 'var(--space-6)' }}>
-            <div className="section-header">
-              <AlertTriangle size={16} color="var(--accent-amber)" />
-              <span className="section-title">Tier 2 — Validated with Conditions (Bounded Scope)</span>
-              <span className="pill pill-amber" style={{ marginLeft: 'auto' }}>
-                {tier2.length} conditional
-              </span>
+          {/* ── Tier 2: Validated with Conditions ── */}
+          <div className="tier-section">
+            <div className="tier-header" onClick={() => toggleTier('tier2')}>
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={18} color="var(--accent-amber)" />
+                <span style={{ fontWeight: 800, fontSize: 15 }}>
+                  Tier 2 — Validated with Conditions (Bounded Scope)
+                </span>
+                <span className="pill pill-amber">{tier2_findings.length}</span>
+              </div>
+              {expandedTiers.tier2 ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </div>
-            {tier2.length > 0 ? (
-              tier2.map(f => (
-                <TieredHypothesisCard key={f.hypothesis_id} finding={f} tier={2} chartBase={API} />
-              ))
-            ) : (
-              <div className="card" style={{ padding: 'var(--space-4)', color: 'var(--text-secondary)', fontSize: 12 }}>
-                No hypotheses classified as Tier 2.
+
+            {expandedTiers.tier2 && (
+              <div className="tier-body">
+                {tier2_findings.length === 0 ? (
+                  <p className="text-muted" style={{ fontSize: 13 }}>No hypotheses classified into Tier 2.</p>
+                ) : (
+                  <div className="flex-col gap-3">
+                    {tier2_findings.map((f) => {
+                      const rev = reviewMap[f.hypothesis_id] || {};
+                      const conf = rev.arbitration?.confidence_score || f.confidence_score || 80;
+                      const conditions = rev.arbitration?.conditions || f.arbitration_conditions || [];
+                      const isCondOpen = expandedConditions[f.hypothesis_id];
+
+                      return (
+                        <div key={f.hypothesis_id} className="finding-card tier2-card">
+                          <div className="flex items-center justify-between" style={{ marginBottom: 'var(--space-2)' }}>
+                            <div className="flex items-center gap-2">
+                              <span className="pill pill-cyan" style={{ fontFamily: 'var(--font-mono)', fontSize: 10 }}>
+                                {f.hypothesis_id}
+                              </span>
+                              <span style={{ fontWeight: 700, fontSize: 14 }}>{f.title}</span>
+                              {f.from_enriched_data && (
+                                <span className="pill pill-green" style={{ fontSize: 9 }}>Enriched Data</span>
+                              )}
+                            </div>
+                            <span className="pill pill-amber">⚠️ CONDITIONAL ({conf}%)</span>
+                          </div>
+
+                          <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 'var(--space-3)', lineHeight: 1.5 }}>
+                            {f.summary || f.statement}
+                          </p>
+
+                          <div className="flex gap-4" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 'var(--space-2)' }}>
+                            <span>Test: {f.test_type}</span>
+                            <span>P-Value: {f.p_value?.toFixed(5)}</span>
+                            <span>{f.effect_size_metric || 'Effect Size'}: {f.effect_size?.toFixed(3)}</span>
+                          </div>
+
+                          {/* Expandable Conditions Drawer */}
+                          {conditions.length > 0 && (
+                            <div style={{ marginTop: 'var(--space-2)' }}>
+                              <button
+                                className="btn btn-ghost"
+                                onClick={() => toggleCondition(f.hypothesis_id)}
+                                style={{ fontSize: 11, color: 'var(--accent-amber)', gap: 4, padding: '4px 8px' }}
+                              >
+                                <AlertTriangle size={12} />
+                                {isCondOpen ? 'Hide Stated Limitations' : `View ${conditions.length} Stated Limitations`}
+                                {isCondOpen ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                              </button>
+
+                              {isCondOpen && (
+                                <div className="conditions-drawer fade-in" style={{ marginTop: 'var(--space-2)' }}>
+                                  <div className="conditions-drawer-title">
+                                    Peer Review Stated Conditions & Scope Boundaries:
+                                  </div>
+                                  {conditions.map((c, ci) => (
+                                    <div key={ci} style={{ marginBottom: 4 }}>• {c}</div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Statistical Chart */}
+                          {f.chart_file && (
+                            <div className="finding-chart-box">
+                              <img
+                                src={`${API}/api/charts/${f.chart_file}`}
+                                alt={`Chart for ${f.title}`}
+                                className="finding-chart-img"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>
 
-          {/* ── Tier 3 Section (Transparency Log) ── */}
-          <div className="transparency-log-section">
-            <div className="section-header">
-              <ShieldAlert size={16} color="var(--accent-rose)" />
-              <span className="section-title" style={{ color: 'var(--accent-rose)' }}>
-                Tier 3 — Invalidated Hypotheses (Transparency Log)
-              </span>
-              <span className="pill pill-rose" style={{ marginLeft: 'auto' }}>
-                {tier3.length} invalidated
-              </span>
+          {/* ── Tier 3: Invalidated Hypotheses (Transparency Log) ── */}
+          <div className="tier-section">
+            <div className="tier-header" onClick={() => toggleTier('tier3')}>
+              <div className="flex items-center gap-2">
+                <XCircle size={18} color="var(--accent-rose)" />
+                <span style={{ fontWeight: 800, fontSize: 15 }}>
+                  Tier 3 — Invalidated Hypotheses (Transparency Log)
+                </span>
+                <span className="pill pill-rose">{tier3_findings.length}</span>
+              </div>
+              {expandedTiers.tier3 ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </div>
-            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 'var(--space-3)' }}>
-              Open science principle: Every hypothesis that failed peer review or statistical thresholds is documented below.
-            </div>
-            {tier3.length > 0 ? (
-              tier3.map(f => (
-                <div key={f.hypothesis_id} className="transparency-item">
-                  <div className="flex items-center justify-between" style={{ marginBottom: 4 }}>
-                    <span style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 13 }}>
-                      [{f.hypothesis_id}] {f.title}
-                    </span>
-                    <span className="pill pill-rose" style={{ fontSize: 10 }}>❌ Invalidated</span>
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--accent-rose)', marginBottom: 2 }}>
-                    Reason: {f.editorial_reasoning || f.summary || 'Failed statistical significance threshold.'}
-                  </div>
-                  <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-tertiary)' }}>
-                    Observed: p={f.p_value.toFixed(4)}, {f.effect_size_metric}={f.effect_size.toFixed(3)}
-                  </div>
+
+            {expandedTiers.tier3 && (
+              <div className="tier-body">
+                <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 'var(--space-3)', fontStyle: 'italic' }}>
+                  Transparent science logs all tested hypotheses, including those invalidated during adversarial peer review or failing FDR thresholds.
                 </div>
-              ))
-            ) : (
-              <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                All tested hypotheses satisfied minimum peer review criteria.
+                {tier3_findings.length === 0 ? (
+                  <p className="text-muted" style={{ fontSize: 13 }}>All candidate hypotheses survived peer review into Tier 1 or Tier 2.</p>
+                ) : (
+                  <div className="flex-col gap-3">
+                    {tier3_findings.map((f) => {
+                      const rev = reviewMap[f.hypothesis_id] || {};
+                      const reason = rev.arbitration?.editorial_reasoning || f.rejection_reason || 'Did not survive adversarial peer review challenge.';
+                      return (
+                        <div key={f.hypothesis_id} className="finding-card tier3-card">
+                          <div className="flex items-center justify-between" style={{ marginBottom: 'var(--space-2)' }}>
+                            <div className="flex items-center gap-2">
+                              <span className="pill pill-cyan" style={{ fontFamily: 'var(--font-mono)', fontSize: 10 }}>
+                                {f.hypothesis_id}
+                              </span>
+                              <span style={{ fontWeight: 700, fontSize: 14, textDecoration: 'line-through', color: 'var(--text-secondary)' }}>
+                                {f.title}
+                              </span>
+                            </div>
+                            <span className="pill pill-rose">❌ INVALIDATED</span>
+                          </div>
+                          <p style={{ fontSize: 12, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                            <strong>Reason for Rejection:</strong> {reason}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>
-        </div>
-      )}
 
-      {/* ── TAB: Charts ── */}
-      {activeTab === 'charts' && (
-        <div className="fade-in">
-          {(!global_charts || Object.keys(global_charts).length === 0) && allFindings.every(f => !f.chart_file) ? (
-            <div className="card" style={{ padding: 'var(--space-8)', textAlign: 'center', color: 'var(--text-secondary)' }}>
-              <BarChart3 size={32} style={{ margin: '0 auto var(--space-3)', opacity: 0.4 }} />
-              <div>No charts generated for this session.</div>
-            </div>
-          ) : (
-            <div className="stagger" style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
-              {global_charts?.correlation_heatmap && (
-                <div className="card chart-container">
-                  <div className="chart-header">
-                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
-                      Correlation Heatmap — All Numerical Features
-                    </span>
-                    <a href={`${API}/api/charts/${global_charts.correlation_heatmap}`} download target="_blank" rel="noopener noreferrer">
-                      <Download size={12} color="var(--text-secondary)" />
-                    </a>
-                  </div>
-                  <img src={`${API}/api/charts/${global_charts.correlation_heatmap}`} alt="Correlation Heatmap" className="chart-img" />
-                </div>
-              )}
-              {global_charts?.target_distribution && (
-                <div className="card chart-container">
-                  <div className="chart-header">
-                    <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
-                      Target Variable Distribution — {profile.active_target}
-                    </span>
-                    <a href={`${API}/api/charts/${global_charts.target_distribution}`} download target="_blank" rel="noopener noreferrer">
-                      <Download size={12} color="var(--text-secondary)" />
-                    </a>
-                  </div>
-                  <img src={`${API}/api/charts/${global_charts.target_distribution}`} alt="Target Distribution" className="chart-img" />
-                </div>
-              )}
-              {allFindings.filter(f => f.chart_file).map(f => (
-                <div key={f.hypothesis_id} className="card chart-container">
-                  <div className="chart-header">
-                    <div>
-                      <span className={`pill ${f.verdict === 'VALIDATED' ? 'pill-green' : f.verdict === 'VALIDATED_WITH_CONDITIONS' ? 'pill-amber' : 'pill-rose'}`} style={{ marginRight: 8 }}>
-                        {f.hypothesis_id}
-                      </span>
-                      <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{f.title}</span>
+          {/* ── Level 3: Future Enhancement Opportunities Section ── */}
+          {optional_gaps?.length > 0 && (
+            <div className="card" style={{ padding: 'var(--space-5)', marginTop: 'var(--space-3)' }}>
+              <div className="flex items-center gap-2" style={{ marginBottom: 'var(--space-3)' }}>
+                <Search size={16} color="var(--accent-cyan)" />
+                <span style={{ fontSize: 14, fontWeight: 800 }}>
+                  Future Data Enhancement Opportunities (Level 3 Active Intelligence)
+                </span>
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 'var(--space-3)' }}>
+                The following data sources were identified by the Data Gap Analysis Agent as opportunities to further extend these findings in future runs:
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--space-3)' }}>
+                {optional_gaps.map((og, i) => (
+                  <div key={i} className="data-gap-card optional">
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
+                      {og.title}
                     </div>
-                    <a href={`${API}/api/charts/${f.chart_file}`} download target="_blank" rel="noopener noreferrer">
-                      <Download size={12} color="var(--text-secondary)" />
-                    </a>
+                    <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginBottom: 4 }}>
+                      {og.what_is_missing}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--accent-cyan)' }}>
+                      <strong>Potential Value:</strong> {og.why_it_matters}
+                    </div>
                   </div>
-                  <img src={`${API}/api/charts/${f.chart_file}`} alt={f.title} className="chart-img" />
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           )}
         </div>
       )}
 
-      {/* ── TAB: Report ── */}
-      {activeTab === 'report' && (
-        <div className="card fade-in" style={{ padding: 'var(--space-6)' }}>
-          <div className="section-header" style={{ marginBottom: 'var(--space-5)' }}>
-            <FileCode size={16} color="var(--accent-cyan)" />
-            <span className="section-title">Peer-Reviewed Executive Research Report</span>
-            <button className="btn btn-secondary" style={{ marginLeft: 'auto' }} onClick={handleDownload}>
-              <Download size={13} /> Download Notebook
-            </button>
-          </div>
-          <div className="markdown-report">
-            <ReactMarkdown>{markdown_report}</ReactMarkdown>
-          </div>
+      {/* ── Tab 2: Raw Markdown ── */}
+      {activeTab === 'raw_markdown' && (
+        <div className="card" style={{ padding: 'var(--space-6)' }}>
+          <pre style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 12,
+            color: 'var(--text-secondary)',
+            whiteSpace: 'pre-wrap',
+            lineHeight: 1.6,
+            background: 'var(--bg-surface)',
+            padding: 'var(--space-4)',
+            borderRadius: 'var(--radius-md)',
+            border: '1px solid var(--card-border)',
+            overflowX: 'auto',
+          }}>
+            {markdown_report}
+          </pre>
         </div>
       )}
     </div>

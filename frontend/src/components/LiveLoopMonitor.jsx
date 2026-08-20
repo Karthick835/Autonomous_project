@@ -2,8 +2,10 @@ import React, { useEffect, useState, useRef } from 'react';
 import {
   Terminal, Cpu, CheckCircle, XCircle, AlertTriangle, Clock,
   Microscope, Lightbulb, Code2, ShieldCheck, FileBarChart, Database,
-  BarChart3, Scale, ShieldAlert, Sparkles, Award
+  BarChart3, Scale, ShieldAlert, Sparkles, Award, Search, RefreshCw,
+  Layers, ArrowUpRight
 } from 'lucide-react';
+import DataGapModal from './DataGapModal';
 
 const API = 'http://127.0.0.1:5050';
 
@@ -13,6 +15,18 @@ const AGENT_CONFIG = {
     icon: <Microscope size={14} />,
     className: 'agent-profiler',
     logColor: 'var(--accent-cyan)',
+  },
+  DataGapAnalysisAgent: {
+    label: 'Data Gap Agent',
+    icon: <Search size={14} />,
+    className: 'agent-hyp',
+    logColor: 'var(--accent-violet)',
+  },
+  DataMergeEngine: {
+    label: 'Merge Engine',
+    icon: <Layers size={14} />,
+    className: 'agent-validator',
+    logColor: 'var(--accent-green)',
   },
   HypothesizerAgent: {
     label: 'Hypothesizer',
@@ -84,6 +98,7 @@ const AGENT_CONFIG = {
 
 const STAGES = [
   { id: 'PROFILING',          label: 'Data Profiling' },
+  { id: 'DATA_GAP_ANALYSIS',  label: 'Data Sufficiency' },
   { id: 'HYPOTHESIZING',      label: 'Hypothesizing' },
   { id: 'EXPERIMENTATION',    label: 'Experiments' },
   { id: 'VALIDATION',         label: 'Validation' },
@@ -149,6 +164,8 @@ export default function LiveLoopMonitor({ sessionId, onComplete }) {
   const [stage, setStage] = useState('PROFILING');
   const [isFinished, setIsFinished] = useState(false);
   const [isError, setIsError] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
+  const [pauseDuration, setPauseDuration] = useState(0);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [tierCounts, setTierCounts] = useState({ tier1: 0, tier2: 0, tier3: 0 });
   const [testedCount, setTestedCount] = useState(0);
@@ -156,9 +173,15 @@ export default function LiveLoopMonitor({ sessionId, onComplete }) {
   const [adversarialDebates, setAdversarialDebates] = useState({});
   const [activeDebateId, setActiveDebateId] = useState(null);
 
+  // Level 3 State
+  const [dataGaps, setDataGaps] = useState(null);
+  const [activeGapModal, setActiveGapModal] = useState(null);
+  const [enrichmentInfo, setEnrichmentInfo] = useState(null);
+
   const logEndRef = useRef(null);
   const startTimeRef = useRef(Date.now());
   const timerRef = useRef(null);
+  const pauseTimerRef = useRef(null);
 
   const typedThought = useTypewriter(lastThought, 12);
 
@@ -169,6 +192,19 @@ export default function LiveLoopMonitor({ sessionId, onComplete }) {
     }, 500);
     return () => clearInterval(timerRef.current);
   }, [isFinished]);
+
+  // Pause duration timer
+  useEffect(() => {
+    if (isPaused) {
+      pauseTimerRef.current = setInterval(() => {
+        setPauseDuration((p) => p + 1);
+      }, 1000);
+    } else {
+      clearInterval(pauseTimerRef.current);
+      setPauseDuration(0);
+    }
+    return () => clearInterval(pauseTimerRef.current);
+  }, [isPaused]);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -191,6 +227,26 @@ export default function LiveLoopMonitor({ sessionId, onComplete }) {
         }
 
         if (data.message) setLastThought(data.message);
+
+        // Handle Level 3 Data Gap Analysis
+        if (data.stage === 'DATA_GAP_ANALYSIS' && data.payload?.gap_report) {
+          setDataGaps(data.payload.gap_report);
+        }
+
+        // Handle Level 3 Data Request / Pause
+        if (data.stage === 'DATA_REQUEST' && data.payload?.gap) {
+          const gap = data.payload.gap;
+          if (data.payload.paused) {
+            setIsPaused(true);
+          }
+          setActiveGapModal(gap);
+        }
+
+        // Handle Enrichment info
+        if (data.payload?.enrichment_info) {
+          setEnrichmentInfo(data.payload.enrichment_info);
+          setIsPaused(false);
+        }
 
         // Handle Adversarial Falsify event
         if (data.stage === 'ADVERSARIAL_FALSIFY' && data.payload?.hypothesis_id) {
@@ -246,12 +302,14 @@ export default function LiveLoopMonitor({ sessionId, onComplete }) {
 
         if (data.stage === 'COMPLETE') {
           setIsFinished(true);
+          setIsPaused(false);
           clearInterval(timerRef.current);
           eventSource.close();
           onComplete(sessionId);
         } else if (data.stage === 'ERROR') {
           setIsError(true);
           setIsFinished(true);
+          setIsPaused(false);
           clearInterval(timerRef.current);
           eventSource.close();
         }
@@ -280,17 +338,75 @@ export default function LiveLoopMonitor({ sessionId, onComplete }) {
 
   return (
     <div className="fade-in" style={{ maxWidth: 1120, margin: '0 auto' }}>
+      {/* ── Data Request Modal (Level 3) ── */}
+      <DataGapModal
+        gap={activeGapModal}
+        sessionId={sessionId}
+        isOpen={Boolean(activeGapModal)}
+        onClose={() => setActiveGapModal(null)}
+        onDataProvided={(res) => {
+          setIsPaused(false);
+          setActiveGapModal(null);
+        }}
+        onSkipped={(res) => {
+          setIsPaused(false);
+          setActiveGapModal(null);
+        }}
+      />
+
+      {/* ── Pipeline Paused Indicator Banner (Level 3) ── */}
+      {isPaused && (
+        <div className="pipeline-paused-banner fade-in">
+          <div className="flex items-center gap-3">
+            <span className="pulse-dot-amber" />
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--accent-amber)' }}>
+                Investigation Paused — Awaiting Supplemental Data
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+                {activeGapModal?.title || 'Data Gap requires user input'} · Paused for {pauseDuration}s
+              </div>
+            </div>
+          </div>
+          <button
+            className="btn btn-primary"
+            onClick={() => activeGapModal && setActiveGapModal({ ...activeGapModal })}
+            style={{ fontSize: 11, height: 28, padding: '0 12px' }}
+          >
+            Open Data Request
+          </button>
+        </div>
+      )}
+
+      {/* ── Enriched Dataset Banner (Level 3) ── */}
+      {enrichmentInfo && (
+        <div className="dataset-enriched-banner fade-in">
+          <div className="flex items-center gap-2">
+            <Sparkles size={14} color="var(--accent-green)" />
+            <span style={{ fontWeight: 700, fontSize: 12, color: 'var(--accent-green)' }}>
+              Enriched Dataset Active
+            </span>
+            <span className="pill pill-green" style={{ fontSize: 10 }}>
+              {enrichmentInfo.original_shape?.[1]} cols → {enrichmentInfo.enriched_shape?.[1]} cols
+            </span>
+            <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>
+              {enrichmentInfo.rows_matched} rows joined via {enrichmentInfo.strategy} strategy ({enrichmentInfo.merge_keys?.join(', ')})
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* ── Header ── */}
       <div className="card" style={{ padding: 'var(--space-5)', marginBottom: 'var(--space-4)' }}>
         <div className="flex items-center justify-between" style={{ marginBottom: 'var(--space-4)' }}>
           <div className="flex items-center gap-3">
             <div className="agent-avatar agent-hyp">
-              <Cpu size={16} className={!isFinished ? 'spin' : ''} />
+              <Cpu size={16} className={!isFinished && !isPaused ? 'spin' : ''} />
             </div>
             <div>
-              <div style={{ fontSize: 15, fontWeight: 800 }}>Level 2 Adversarial Validation Loop</div>
+              <div style={{ fontSize: 15, fontWeight: 800 }}>Level 3 Active Discovery & Peer Review Loop</div>
               <div style={{ fontSize: 11, color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
-                session: {sessionId} · 8 active agents
+                session: {sessionId} · 9 active agents · Active data acquisition
               </div>
             </div>
           </div>
@@ -298,10 +414,12 @@ export default function LiveLoopMonitor({ sessionId, onComplete }) {
           <div className="flex items-center gap-2">
             {isError ? (
               <span className="pill pill-rose"><span className="pill-dot" />Pipeline Error</span>
+            ) : isPaused ? (
+              <span className="pill pill-amber"><span className="pill-dot-pulse" />Paused for Data</span>
             ) : isFinished ? (
-              <span className="pill pill-green"><span className="pill-dot" />Peer Review Complete</span>
+              <span className="pill pill-green"><span className="pill-dot" />Investigation Complete</span>
             ) : (
-              <span className="pill pill-violet"><span className="pill-dot-pulse" />Adversarial Review Active</span>
+              <span className="pill pill-violet"><span className="pill-dot-pulse" />Pipeline Active</span>
             )}
           </div>
         </div>
@@ -335,6 +453,64 @@ export default function LiveLoopMonitor({ sessionId, onComplete }) {
           })}
         </div>
       </div>
+
+      {/* ── Level 3: Data Sufficiency Panel ── */}
+      {dataGaps && (
+        <div className="card fade-in" style={{ padding: 'var(--space-5)', marginBottom: 'var(--space-4)' }}>
+          <div className="flex items-center justify-between" style={{ marginBottom: 'var(--space-3)' }}>
+            <div className="flex items-center gap-2">
+              <Search size={16} color="var(--accent-cyan)" />
+              <span style={{ fontSize: 13, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                Data Sufficiency & Gap Review (Agent 9)
+              </span>
+            </div>
+            <div className="flex gap-2">
+              {dataGaps.critical_count > 0 && (
+                <span className="pill pill-rose">{dataGaps.critical_count} Critical</span>
+              )}
+              {dataGaps.important_count > 0 && (
+                <span className="pill pill-amber">{dataGaps.important_count} Important</span>
+              )}
+              {dataGaps.optional_count > 0 && (
+                <span className="pill pill-cyan">{dataGaps.optional_count} Optional</span>
+              )}
+            </div>
+          </div>
+
+          <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 'var(--space-3)' }}>
+            {dataGaps.overall_assessment}
+          </p>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 'var(--space-3)' }}>
+            {dataGaps.gaps?.map((gap) => (
+              <div
+                key={gap.id}
+                className={`data-gap-card ${gap.priority.toLowerCase()}`}
+                onClick={() => setActiveGapModal(gap)}
+                title="Click to view details or upload supplemental data"
+              >
+                <div className="flex items-center justify-between" style={{ marginBottom: 4 }}>
+                  <span className={`pill ${gap.priority === 'CRITICAL' ? 'pill-rose' : gap.priority === 'IMPORTANT' ? 'pill-amber' : 'pill-cyan'}`} style={{ fontSize: 9 }}>
+                    {gap.priority}
+                  </span>
+                  <span style={{ fontSize: 10, color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>
+                    {gap.id}
+                  </span>
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 4 }}>
+                  {gap.title}
+                </div>
+                <p style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.4, margin: 0 }}>
+                  {gap.why_it_matters?.slice(0, 110)}...
+                </p>
+                <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4, fontSize: 10, color: 'var(--accent-violet)' }}>
+                  <span>Provide data</span> <ArrowUpRight size={12} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Live Adversarial Peer Review Panel ── */}
       {activeDebate && (

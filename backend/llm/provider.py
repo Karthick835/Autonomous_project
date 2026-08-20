@@ -25,9 +25,9 @@ class LLMProvider:
 
     SUPPORTED_MODELS = {
         "gemini": {
-            "display_name": "Google Gemini 2.5 Flash",
+            "display_name": "Google Gemini 3.6 Flash",
             "env_key": "GEMINI_API_KEY",
-            "model_id": "gemini-2.5-flash",
+            "model_id": "gemini-3.6-flash",
         },
         "gpt4o": {
             "display_name": "OpenAI GPT-4o",

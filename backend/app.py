@@ -1,6 +1,9 @@
 """
 Autonomous AI Scientist — FastAPI Backend
 Full multi-LLM, chart serving, ChromaDB memory, NL query, multi-dataset comparison.
+Level 3: Active Data Acquisition System endpoints:
+  - POST /api/provide-data/{session_id}
+  - GET  /api/skip-data-request/{session_id}
 Serves React frontend in production mode.
 """
 
@@ -11,6 +14,7 @@ import sys
 import shutil
 import uuid
 import time
+import threading
 from pathlib import Path
 from typing import Dict, Any, Optional
 
@@ -27,7 +31,9 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from engine.orchestrator import ResearchOrchestrator
+from engine.merger import DataMergeEngine
 from agents.profiler import DataProfilerAgent
+from agents.data_gap_analysis_agent import DataGapAnalysisAgent
 from agents.validator import sanitize_val
 from agents.nl_interpreter import interpret_nl_query
 from llm.provider import LLMProvider, LLMConfigurationError
@@ -45,7 +51,7 @@ for d in [UPLOADS_DIR, CHARTS_DIR]:
     os.makedirs(d, exist_ok=True)
 
 # ── App ────────────────────────────────────────────────────────────────────────
-app = FastAPI(title="Autonomous AI Scientist API", version="2.0.0")
+app = FastAPI(title="Autonomous AI Scientist API", version="3.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -61,6 +67,7 @@ app.mount("/api/charts", StaticFiles(directory=CHARTS_DIR), name="charts")
 # ── In-memory session store ────────────────────────────────────────────────────
 sessions: Dict[str, Dict[str, Any]] = {}
 event_queues: Dict[str, asyncio.Queue] = {}
+pause_events: Dict[str, threading.Event] = {}
 
 
 # ── Request Models ─────────────────────────────────────────────────────────────
@@ -113,7 +120,7 @@ def get_status():
     mem = get_memory()
     return {
         "status": "online",
-        "system": "Autonomous AI Scientist Engine v2.0",
+        "system": "Autonomous AI Scientist Engine v3.0 (Level 3 Active Data Acquisition)",
         "active_sessions": len(sessions),
         "memory": mem.get_memory_stats(),
         "available_models": LLMProvider.get_available_models(),
@@ -203,6 +210,7 @@ def run_orchestrator_background(
     llm_model: Optional[str],
     queue: asyncio.Queue,
     loop: asyncio.AbstractEventLoop,
+    pause_event: threading.Event,
 ):
     def event_cb(event):
         asyncio.run_coroutine_threadsafe(queue.put(event), loop)
@@ -212,7 +220,6 @@ def run_orchestrator_background(
         charts_dir=CHARTS_DIR,
     )
 
-    # Build LLM provider in background thread (no HTTPException here)
     llm_provider = None
     if llm_model:
         try:
@@ -230,17 +237,19 @@ def run_orchestrator_background(
             sessions[session_id]["status"] = "failed"
             sessions[session_id]["error"] = str(e)
             return
-        except Exception as e:
+        except Exception:
             pass  # Fall back to heuristics
 
     try:
         results = orchestrator.run_investigation(
-            csv_path,
+            csv_path=csv_path,
             domain_context=domain_context,
             target_override=target_column,
             task_type_override=task_type,
             llm_provider=llm_provider,
             event_callback=event_cb,
+            pause_event=pause_event,
+            session_state=sessions.get(session_id),
         )
         sessions[session_id]["status"] = "completed"
         sessions[session_id]["results"] = results
@@ -276,6 +285,9 @@ async def start_investigation(req: InvestigateRequest, background_tasks: Backgro
     queue: asyncio.Queue = asyncio.Queue()
     event_queues[session_id] = queue
 
+    p_event = threading.Event()
+    pause_events[session_id] = p_event
+
     sessions[session_id] = {
         "session_id": session_id,
         "status": "running",
@@ -286,6 +298,9 @@ async def start_investigation(req: InvestigateRequest, background_tasks: Backgro
         "llm_model": req.llm_model,
         "created_at": time.time(),
         "results": None,
+        "paused_for_gap": None,
+        "enriched_csv": None,
+        "last_action": None,
     }
 
     loop = asyncio.get_event_loop()
@@ -299,12 +314,104 @@ async def start_investigation(req: InvestigateRequest, background_tasks: Backgro
         req.llm_model,
         queue,
         loop,
+        p_event,
     )
 
     return {
         "session_id": session_id,
         "status": "running",
-        "message": "Scientific investigation started.",
+        "message": "Scientific investigation started (Level 3 Active Data Acquisition enabled).",
+    }
+
+
+# ── Level 3 API: Provide Additional Supplemental Data ──────────────────────────
+@app.post("/api/provide-additional-data")
+@app.post("/api/provide-data/{session_id}")
+async def provide_additional_data(
+    session_id: Optional[str] = None,
+    file: UploadFile = File(...),
+):
+    if not file.filename.endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only CSV files are supported for supplemental data.")
+
+    # Look up session
+    sid = session_id
+    if not sid or sid not in sessions:
+        # Check active sessions if only 1 is running/paused
+        active = [s for s in sessions if sessions[s].get("status") in ["running", "paused"]]
+        if active:
+            sid = active[0]
+        else:
+            raise HTTPException(status_code=404, detail="No active or paused session found.")
+
+    session = sessions[sid]
+    paused_gap = session.get("paused_for_gap") or {}
+
+    saved_filename = f"supp_{uuid.uuid4().hex[:8]}_{file.filename}"
+    saved_path = os.path.join(UPLOADS_DIR, saved_filename)
+
+    with open(saved_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    # Validate columns
+    supp_cols = DataMergeEngine.get_columns(saved_path)
+    gap_analyzer = DataGapAnalysisAgent()
+    val_res = gap_analyzer.validate_supplemental_csv(paused_gap, supp_cols)
+
+    if not val_res["valid"]:
+        return {
+            "success": False,
+            "status": "validation_failed",
+            "message": val_res["message"],
+            "matched_columns": val_res["matched_columns"],
+            "missing_columns": val_res["missing_columns"],
+        }
+
+    # Store supplemental file path and resume pipeline
+    session["enriched_csv"] = saved_path
+    session["last_action"] = "provide_data"
+    session["status"] = "running"
+    session["paused_for_gap"] = None
+
+    if sid in pause_events:
+        pause_events[sid].set()
+
+    return {
+        "success": True,
+        "status": "resuming",
+        "message": f"Supplemental data validated ({len(supp_cols)} columns). Merging and resuming pipeline...",
+        "matched_columns": val_res["matched_columns"],
+    }
+
+
+# ── Level 3 API: Skip Data Request ─────────────────────────────────────────────
+@app.get("/api/skip-data-request/{session_id}")
+@app.post("/api/skip-data-request/{session_id}")
+@app.get("/api/skip-data-request")
+@app.get("/api/skip-gap/{session_id}")
+async def skip_data_request(session_id: Optional[str] = None):
+    sid = session_id
+    if not sid or sid not in sessions:
+        active = [s for s in sessions if sessions[s].get("status") in ["running", "paused"]]
+        if active:
+            sid = active[0]
+        else:
+            raise HTTPException(status_code=404, detail="No active or paused session found.")
+
+    session = sessions[sid]
+    gap = session.get("paused_for_gap") or {}
+
+    session["last_action"] = "skip"
+    session["status"] = "running"
+    session["paused_for_gap"] = None
+
+    if sid in pause_events:
+        pause_events[sid].set()
+
+    return {
+        "success": True,
+        "status": "resumed_with_warning",
+        "message": f"Skipped supplemental data for '{gap.get('title', 'Data Gap')}'. Downstream findings will be flagged with limitation warnings.",
     }
 
 
